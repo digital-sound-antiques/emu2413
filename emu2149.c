@@ -35,6 +35,11 @@ static e_uint32 voltbl[2][32] = {
    0xB4, 0xB4, 0xFF, 0xFF}
 };
 
+static e_uint8 regmsk[16] = {
+    0xff, 0x0f, 0xff, 0x0f, 0xff, 0x0f, 0x1f, 0x3f, 
+    0x1f, 0x1f, 0x1f, 0xff, 0xff, 0x0f, 0xff, 0xff
+};
+
 #define GETA_BITS 24
 
 static void
@@ -135,7 +140,6 @@ PSG_reset (PSG * psg)
 
   for (i = 0; i < 3; i++)
   {
-    psg->cout[i] = 0;
     psg->count[i] = 0x1000;
     psg->freq[i] = 0;
     psg->edge[i] = 0;
@@ -238,7 +242,7 @@ calc (PSG * psg)
     if (psg->noise_seed & 1)
       psg->noise_seed ^= 0x24000;
     psg->noise_seed >>= 1;
-    psg->noise_count -= psg->noise_freq;
+    psg->noise_count -= psg->noise_freq?psg->noise_freq:(1<<1);
   }
   noise = psg->noise_seed & 1;
 
@@ -262,14 +266,13 @@ calc (PSG * psg)
     if (psg->mask&PSG_MASK_CH(i))
       continue;
 
-    if ((psg->tmask[i] || psg->edge[i]) && (psg->nmask[i] || noise))
+    if ((psg->freq[i]==0&&psg->noise_freq==0) || 
+        ((psg->tmask[i] || psg->edge[i]) && (psg->nmask[i] || noise)))
     {
       if (!(psg->volume[i] & 32))
-        psg->cout[i] = psg->voltbl[psg->volume[i] & 31];
+        mix += psg->voltbl[psg->volume[i] & 31];
       else
-        psg->cout[i] = psg->voltbl[psg->env_ptr];
-
-	  mix += psg->cout[i];
+        mix += psg->voltbl[psg->env_ptr];
     }
 
   }
@@ -303,6 +306,8 @@ PSG_writeReg (PSG * psg, e_uint32 reg, e_uint32 val)
 
   if (reg > 15) return;
 
+  val &= regmsk[reg];
+
   psg->reg[reg] = (e_uint8) (val & 0xff);
   switch (reg)
   {
@@ -317,7 +322,7 @@ PSG_writeReg (PSG * psg, e_uint32 reg, e_uint32 val)
     break;
 
   case 6:
-    psg->noise_freq = (val == 0) ? 1 : ((val & 31) << 1);
+    psg->noise_freq = (val & 31) << 1;
     break;
 
   case 7:

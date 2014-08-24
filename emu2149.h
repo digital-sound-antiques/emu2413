@@ -30,7 +30,6 @@ extern "C"
 
     e_uint8 reg[0x20];
     e_int32 out;
-    e_int32 cout[3];
 
     e_uint32 clk, rate, base_incr, quality;
 

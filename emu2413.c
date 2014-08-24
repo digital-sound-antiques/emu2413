@@ -132,7 +132,7 @@ static unsigned char default_inst[OPLL_TONE_NUM][(16 + 3) * 16] = {
 #define PM_AMP (1<<PM_AMP_BITS)
 
 /* PM speed(Hz) and depth(cent) */
-#define PM_SPEED 6.4
+#define PM_SPEED 6.068835788302951
 #define PM_DEPTH 13.75
 
 /* AM speed(Hz) and depth(dB) */
@@ -1055,6 +1055,7 @@ OPLL_reset (OPLL * opll)
   opll->sprev[0] = opll->sprev[1] = 0;
   opll->snext[0] = opll->snext[1] = 0;
 #endif
+
 }
 
 /* Force Refresh (When external program changes some parameters). */
@@ -1468,7 +1469,6 @@ OPLL_calc (OPLL * opll)
   opll->oplltime -= opll->realstep;
   opll->out = (e_int16) (((double) opll->next * (opll->opllstep - opll->oplltime)
                           + (double) opll->prev * opll->oplltime) / opll->opllstep);
-
   return (e_int16) opll->out;
 }
 #endif
