@@ -42,9 +42,19 @@ Makefile
 cmake_install.cmake
 install_manifest.txt
 
-# Visual Studio Projects
+# VS Projects
 *.vcxproj
 *.vcxproj.filters
 Project.VC.opendb
 Project.sdf
 Project.sln
+
+# VS Build Results
+.vs/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+Win32/
+*.dir/
+build/
