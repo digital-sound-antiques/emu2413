@@ -21,7 +21,7 @@
 #define DATALENGTH (SAMPLERATE*8)
 
 static void
-WORD (char *buf, e_uint32 data)
+WORD (char *buf, uint32_t data)
 {
 
   buf[0] = data & 0xff;
@@ -30,7 +30,7 @@ WORD (char *buf, e_uint32 data)
 }
 
 static void
-DWORD (char *buf, e_uint32 data)
+DWORD (char *buf, uint32_t data)
 {
 
   buf[0] = data & 0xff;
