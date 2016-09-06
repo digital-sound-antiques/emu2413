@@ -65,8 +65,6 @@ typedef struct __OPLL {
   uint32_t realstep ;
   uint32_t oplltime ;
   uint32_t opllstep ;
-  int32_t prev, next ;
-  int32_t sprev[2],snext[2];
   uint32_t pan[16];
 
   /* Register */
@@ -98,6 +96,9 @@ typedef struct __OPLL {
   int32_t patch_update[2] ; /* flag for check patch update */
 
   uint32_t mask ;
+
+  /* Output of each channels / 0-8:TONE, 9:BD 10:HH 11:SD, 12:TOM, 13:CYM */
+  int16_t ch_out[14];
 
 } OPLL ;
 

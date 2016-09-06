@@ -34,6 +34,7 @@
   2002 05-30 : Version 0.60 -- Fixed HH&CYM generator and all voice datas.
   2004 04-10 : Version 0.61 -- Added YMF281B tone (defined by Chabin).
   2015 12-13 : Version 0.62 -- Changed own integer types to C99 stdint.h types.
+  2016 09-06 : Version 0.63 -- Support per-channel output.
 
   References: 
     fmopl.c        -- 1999,2000 written by Tatsuyuki Satoh (MAME development).
@@ -974,8 +975,6 @@ OPLL_reset (OPLL * opll)
   opll->oplltime = 0;
   for (i = 0; i < 14; i++)
     opll->pan[i] = 2;
-  opll->sprev[0] = opll->sprev[1] = 0;
-  opll->snext[0] = opll->snext[1] = 0;
 
 }
 
@@ -1304,10 +1303,12 @@ calc_slot_hat (OPLL_SLOT *slot, int32_t pgout_cym, uint32_t noise)
   return DB2LIN_TABLE[dbout + slot->egout];
 }
 
-static int16_t
-calc (OPLL * opll)
+static void
+update_output (OPLL * opll)
 {
-  int32_t inst = 0, perc = 0, out = 0;
+  const int INST_VOL_MULT = 8;
+  const int RHYTHM_VOL_MULT = 16;
+
   int32_t i;
 
   update_ampm (opll);
@@ -1319,71 +1320,118 @@ calc (OPLL * opll)
     calc_envelope(&opll->slot[i],opll->lfo_am);
   }
 
+  /* CH1-6 */
   for (i = 0; i < 6; i++)
     if (!(opll->mask & OPLL_MASK_CH (i)) && (CAR(opll,i)->eg_mode != FINISH))
-      inst += calc_slot_car (CAR(opll,i), calc_slot_mod(MOD(opll,i)));
+      opll->ch_out[i] += calc_slot_car (CAR(opll,i), calc_slot_mod(MOD(opll,i))) * INST_VOL_MULT;
 
-  /* CH6 */
+  /* CH7 */
   if (opll->patch_number[6] <= 15)
   {
     if (!(opll->mask & OPLL_MASK_CH (6)) && (CAR(opll,6)->eg_mode != FINISH))
-      inst += calc_slot_car (CAR(opll,6), calc_slot_mod(MOD(opll,6)));
+      opll->ch_out[6] += calc_slot_car (CAR(opll,6), calc_slot_mod(MOD(opll,6))) * INST_VOL_MULT;
   }
   else
   {
     if (!(opll->mask & OPLL_MASK_BD) && (CAR(opll,6)->eg_mode != FINISH))
-      perc += calc_slot_car (CAR(opll,6), calc_slot_mod(MOD(opll,6)));
+      opll->ch_out[9] += calc_slot_car (CAR(opll,6), calc_slot_mod(MOD(opll,6))) * RHYTHM_VOL_MULT;
   }
 
-  /* CH7 */
+  /* CH8 */
   if (opll->patch_number[7] <= 15)
   {
     if (!(opll->mask & OPLL_MASK_CH (7)) && (CAR(opll,7)->eg_mode != FINISH))
-      inst += calc_slot_car (CAR(opll,7), calc_slot_mod(MOD(opll,7)));
+      opll->ch_out[7] += calc_slot_car (CAR(opll,7), calc_slot_mod(MOD(opll,7))) * INST_VOL_MULT;
   }
   else
   {
     if (!(opll->mask & OPLL_MASK_HH) && (MOD(opll,7)->eg_mode != FINISH))
-      perc += calc_slot_hat (MOD(opll,7), CAR(opll,8)->pgout, opll->noise_seed&1);
+      opll->ch_out[10] += calc_slot_hat (MOD(opll,7), CAR(opll,8)->pgout, opll->noise_seed&1) * RHYTHM_VOL_MULT;
     if (!(opll->mask & OPLL_MASK_SD) && (CAR(opll,7)->eg_mode != FINISH))
-      perc -= calc_slot_snare (CAR(opll,7), opll->noise_seed&1);
+      opll->ch_out[11] -= calc_slot_snare (CAR(opll,7), opll->noise_seed&1) * RHYTHM_VOL_MULT;
   }
 
-  /* CH8 */
+  /* CH9 */
   if (opll->patch_number[8] <= 15)
   {
     if (!(opll->mask & OPLL_MASK_CH(8)) && (CAR(opll,8)->eg_mode != FINISH))
-      inst += calc_slot_car (CAR(opll,8), calc_slot_mod (MOD(opll,8)));
+      opll->ch_out[8] += calc_slot_car (CAR(opll,8), calc_slot_mod (MOD(opll,8))) * INST_VOL_MULT;
   }
   else
   {
     if (!(opll->mask & OPLL_MASK_TOM) && (MOD(opll,8)->eg_mode != FINISH))
-      perc += calc_slot_tom (MOD(opll,8));
+      opll->ch_out[12] += calc_slot_tom (MOD(opll,8)) * RHYTHM_VOL_MULT;
     if (!(opll->mask & OPLL_MASK_CYM) && (CAR(opll,8)->eg_mode != FINISH))
-      perc -= calc_slot_cym (CAR(opll,8), MOD(opll,7)->pgout);
+      opll->ch_out[13] -= calc_slot_cym (CAR(opll,8), MOD(opll,7)->pgout) * RHYTHM_VOL_MULT;
   }
 
-  out = inst + (perc << 1);
-  return (int16_t) out << 3;
+  /* Always calc average of two samples */
+  for (i=0;i<14;i++) {
+    opll->ch_out[i] >>= 1;
+  }
+
+}
+
+static inline int16_t
+mix_output(OPLL *opll) {
+  int i;
+  opll->out = opll->ch_out[0];
+  for (i=1;i<14;i++) {
+    opll->out += opll->ch_out[i];
+  }
+  return (int16_t)opll->out;
 }
 
 int16_t
 OPLL_calc (OPLL * opll)
 {
   if (!opll->quality)
-    return calc (opll);
+  {
+    update_output(opll);
+    return mix_output(opll);
+  }
 
   while (opll->realstep > opll->oplltime)
   {
     opll->oplltime += opll->opllstep;
-    opll->prev = opll->next;
-    opll->next = calc (opll);
+    update_output(opll);
+  }
+  opll->oplltime -= opll->realstep;
+  
+  return mix_output(opll);
+}
+
+static inline void
+mix_output_stereo(OPLL *opll, int32_t out[2]) {
+  int ch;
+  out[0] = out[1] = 0;
+  for(ch=0;ch<14;ch++) {
+    if(opll->pan[ch]&1)
+      out[1] += opll->ch_out[ch];
+    if(opll->pan[ch]&2)
+      out[0] += opll->ch_out[ch];
+  }
+  opll->out = (out[0] + out[1]) >> 1;
+}
+
+void
+OPLL_calc_stereo (OPLL * opll, int32_t out[2])
+{
+  if (!opll->quality)
+  {
+    update_output(opll);
+    mix_output_stereo(opll, out);
+    return;
   }
 
+  while (opll->realstep > opll->oplltime)
+  {
+    opll->oplltime += opll->opllstep;
+    update_output(opll);
+  }
   opll->oplltime -= opll->realstep;
-  opll->out = (int16_t) (((double) opll->next * (opll->opllstep - opll->oplltime)
-                          + (double) opll->prev * opll->oplltime) / opll->opllstep);
-  return (int16_t) opll->out;
+
+  mix_output_stereo(opll, out);
 }
 
 uint32_t
@@ -1673,90 +1721,4 @@ void
 OPLL_set_pan (OPLL * opll, uint32_t ch, uint32_t pan)
 {
   opll->pan[ch & 15] = pan & 3;
-}
-
-static void
-calc_stereo (OPLL * opll, int32_t out[2])
-{
-  int32_t b[4] = { 0, 0, 0, 0 };        /* Ignore, Right, Left, Center */
-  int32_t r[4] = { 0, 0, 0, 0 };        /* Ignore, Right, Left, Center */
-  int32_t i;
-
-  update_ampm (opll);
-  update_noise (opll);
-
-  for(i=0;i<18;i++)
-  {
-    calc_phase(&opll->slot[i],opll->lfo_pm);
-    calc_envelope(&opll->slot[i],opll->lfo_am);
-  }
-
-  for (i = 0; i < 6; i++)
-    if (!(opll->mask & OPLL_MASK_CH (i)) && (CAR(opll,i)->eg_mode != FINISH))
-      b[opll->pan[i]] += calc_slot_car (CAR(opll,i), calc_slot_mod (MOD(opll,i)));
-
-
-  if (opll->patch_number[6] <= 15)
-  {
-    if (!(opll->mask & OPLL_MASK_CH (6)) && (CAR(opll,6)->eg_mode != FINISH))
-      b[opll->pan[6]] += calc_slot_car (CAR(opll,6), calc_slot_mod (MOD(opll,6)));
-  }
-  else
-  {
-    if (!(opll->mask & OPLL_MASK_BD) && (CAR(opll,6)->eg_mode != FINISH))
-      r[opll->pan[9]] += calc_slot_car (CAR(opll,6), calc_slot_mod (MOD(opll,6)));
-  }
-
-  if (opll->patch_number[7] <= 15)
-  {
-    if (!(opll->mask & OPLL_MASK_CH (7)) && (CAR (opll,7)->eg_mode != FINISH))
-      b[opll->pan[7]] += calc_slot_car (CAR (opll,7), calc_slot_mod (MOD (opll,7)));
-  }
-  else
-  {
-    if (!(opll->mask & OPLL_MASK_HH) && (MOD (opll,7)->eg_mode != FINISH))
-      r[opll->pan[10]] += calc_slot_hat (MOD (opll,7), CAR(opll,8)->pgout, opll->noise_seed&1);
-    if (!(opll->mask & OPLL_MASK_SD) && (CAR (opll,7)->eg_mode != FINISH))
-      r[opll->pan[11]] -= calc_slot_snare (CAR (opll,7), opll->noise_seed&1);
-  }
-
-  if (opll->patch_number[8] <= 15)
-  {
-    if (!(opll->mask & OPLL_MASK_CH (8)) && (CAR (opll,8)->eg_mode != FINISH))
-      b[opll->pan[8]] += calc_slot_car (CAR (opll,8), calc_slot_mod (MOD (opll,8)));
-  }
-  else
-  {
-    if (!(opll->mask & OPLL_MASK_TOM) && (MOD (opll,8)->eg_mode != FINISH))
-      r[opll->pan[12]] += calc_slot_tom (MOD (opll,8));
-    if (!(opll->mask & OPLL_MASK_CYM) && (CAR (opll,8)->eg_mode != FINISH))
-      r[opll->pan[13]] -= calc_slot_cym (CAR (opll,8), MOD(opll,7)->pgout);
-  }
-
-  out[1] = (b[1] + b[3] + ((r[1] + r[3]) << 1)) <<3;
-  out[0] = (b[2] + b[3] + ((r[2] + r[3]) << 1)) <<3;
-}
-
-void
-OPLL_calc_stereo (OPLL * opll, int32_t out[2])
-{
-  if (!opll->quality)
-  {
-    calc_stereo (opll, out);
-    return;
-  }
-
-  while (opll->realstep > opll->oplltime)
-  {
-    opll->oplltime += opll->opllstep;
-    opll->sprev[0] = opll->snext[0];
-    opll->sprev[1] = opll->snext[1];
-    calc_stereo (opll, opll->snext);
-  }
-
-  opll->oplltime -= opll->realstep;
-  out[0] = (int16_t) (((double) opll->snext[0] * (opll->opllstep - opll->oplltime)
-                       + (double) opll->sprev[0] * opll->oplltime) / opll->opllstep);
-  out[1] = (int16_t) (((double) opll->snext[1] * (opll->opllstep - opll->oplltime)
-                       + (double) opll->sprev[1] * opll->oplltime) / opll->opllstep);
 }
