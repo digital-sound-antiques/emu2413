@@ -97,8 +97,8 @@ typedef struct __OPLL {
 
   uint32_t mask ;
 
-  /* Output of each channels / 0-8:TONE, 9:BD 10:HH 11:SD, 12:TOM, 13:CYM */
-  int16_t ch_out[14];
+  /* Output of each channels / 0-8:TONE, 9:BD 10:HH 11:SD, 12:TOM, 13:CYM, 14:Reserved for DAC */
+  int16_t ch_out[15];
 
 } OPLL ;
 

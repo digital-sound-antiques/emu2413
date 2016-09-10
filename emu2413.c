@@ -1366,7 +1366,7 @@ update_output (OPLL * opll)
   }
 
   /* Always calc average of two samples */
-  for (i=0;i<14;i++) {
+  for (i=0;i<15;i++) {
     opll->ch_out[i] >>= 1;
   }
 
@@ -1376,7 +1376,7 @@ static inline int16_t
 mix_output(OPLL *opll) {
   int i;
   opll->out = opll->ch_out[0];
-  for (i=1;i<14;i++) {
+  for (i=1;i<15;i++) {
     opll->out += opll->ch_out[i];
   }
   return (int16_t)opll->out;
@@ -1405,7 +1405,7 @@ static inline void
 mix_output_stereo(OPLL *opll, int32_t out[2]) {
   int ch;
   out[0] = out[1] = 0;
-  for(ch=0;ch<14;ch++) {
+  for(ch=0;ch<15;ch++) {
     if(opll->pan[ch]&1)
       out[1] += opll->ch_out[ch];
     if(opll->pan[ch]&2)
