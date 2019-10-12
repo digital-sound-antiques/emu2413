@@ -35,7 +35,7 @@
   2004 04-10 : Version 0.61 -- Added YMF281B tone (defined by Chabin).
   2015 12-13 : Version 0.62 -- Changed own integer types to C99 stdint.h types.
   2016 09-06 : Version 0.63 -- Support per-channel output.
-  2019 10-12 : Version 0.70 -- Force to dump before keyon
+  2019 10-13 : Version 0.70 -- Force to dump before keyon
                             -- Dump size changed from to 8 bytes per voice.
                             -- Fixed snare, hi-hat, top-cym volume.
 
@@ -533,7 +533,7 @@ calc_eg_dphase (OPLL_SLOT * slot)
       return dphaseDRTable[7][slot->rks];
 
   case SETTLE:
-    return dphaseDRTable[12][0];
+    return dphaseDRTable[14][0];
 
   case FINISH:
     return 0;
@@ -1256,9 +1256,9 @@ calc_slot_cym (OPLL_SLOT * slot, uint32_t pgout_hh)
       ((BIT(pgout_hh,PG_BITS-8)^BIT(pgout_hh,PG_BITS-1))|BIT(pgout_hh,PG_BITS-7)) ^
       (BIT(slot->pgout,PG_BITS-7)&!BIT(slot->pgout,PG_BITS-5))
     )
-    dbout = DB_NEG(0.0);
+    dbout = DB_NEG(3.0);
   else
-    dbout = DB_POS(0.0);
+    dbout = DB_POS(3.0);
 
   return DB2LIN_TABLE[dbout + slot->egout];
 }
@@ -1281,14 +1281,14 @@ calc_slot_hat (OPLL_SLOT *slot, int32_t pgout_cym, uint32_t noise)
     if(noise)
       dbout = DB_NEG(6.0);
     else
-      dbout = DB_NEG(0.0);
+      dbout = DB_NEG(3.0);
   }
   else
   {
     if(noise)
       dbout = DB_POS(6.0);
     else
-      dbout = DB_POS(0.0);
+      dbout = DB_POS(3.0);
   }
 
   return DB2LIN_TABLE[dbout + slot->egout];
