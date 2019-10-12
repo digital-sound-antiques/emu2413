@@ -35,6 +35,7 @@
   2004 04-10 : Version 0.61 -- Added YMF281B tone (defined by Chabin).
   2015 12-13 : Version 0.62 -- Changed own integer types to C99 stdint.h types.
   2016 09-06 : Version 0.63 -- Support per-channel output.
+  2019 10-12 : Version 0.70 -- Force to dump before keyon.
 
   References: 
     fmopl.c        -- 1999,2000 written by Tatsuyuki Satoh (MAME development).
@@ -538,7 +539,7 @@ calc_eg_dphase (OPLL_SLOT * slot)
       return dphaseDRTable[7][slot->rks];
 
   case SETTLE:
-    return dphaseDRTable[15][0];
+    return dphaseDRTable[12][0];
 
   case FINISH:
     return 0;
@@ -580,18 +581,7 @@ calc_eg_dphase (OPLL_SLOT * slot)
 static inline void
 slotOn (OPLL_SLOT * slot)
 {
-  slot->eg_mode = ATTACK;
-  slot->eg_phase = 0;
-  slot->phase = 0;
-  UPDATE_EG(slot);
-}
-
-/* Slot key on without reseting the phase */
-static inline void
-slotOn2 (OPLL_SLOT * slot)
-{
-  slot->eg_mode = ATTACK;
-  slot->eg_phase = 0;
+  slot->eg_mode = SETTLE;
   UPDATE_EG(slot);
 }
 
@@ -649,14 +639,14 @@ static inline void
 keyOn_HH (OPLL * opll)
 {
   if (!opll->slot_on_flag[SLOT_HH])
-    slotOn2 (MOD(opll,7));
+    slotOn (MOD(opll,7));
 }
 
 static inline void
 keyOn_CYM (OPLL * opll)
 {
   if (!opll->slot_on_flag[SLOT_CYM])
-    slotOn2 (CAR(opll,8));
+    slotOn (CAR(opll,8));
 }
 
 /* Drum key off */
@@ -1082,7 +1072,7 @@ update_noise (OPLL * opll)
 
 /* EG */
 static void
-calc_envelope (OPLL_SLOT * slot, int32_t lfo)
+calc_envelope (OPLL_SLOT * slot, int32_t lfo, int master, OPLL_SLOT * slave_slot)
 {
 #define S2E(x) (SL2EG((int32_t)(x/SL_STEP))<<(EG_DP_BITS-EG_BITS))
 
@@ -1152,7 +1142,18 @@ calc_envelope (OPLL_SLOT * slot, int32_t lfo)
     slot->eg_phase += slot->eg_dphase;
     if (egout >= (1 << EG_BITS))
     {
-      slot->eg_mode = ATTACK;
+      if (master) {
+        slot->eg_mode = ATTACK;
+        slot->eg_phase = 0;
+        slot->phase = 0;
+        if (slave_slot) {
+          slave_slot->eg_mode = ATTACK;
+          slave_slot->eg_phase = 0;
+          slave_slot->phase = 0;
+        }
+      } else {
+        slot->eg_phase = FINISH;
+      }
       egout = (1 << EG_BITS) - 1;
       UPDATE_EG(slot);
     }
@@ -1241,7 +1242,7 @@ calc_slot_snare (OPLL_SLOT * slot, uint32_t noise)
   if(slot->egout>=(DB_MUTE-1))
     return 0;
   
-  if(BIT(slot->pgout,7))
+  if(BIT(slot->pgout,PG_BITS-2))
     return DB2LIN_TABLE[(noise?DB_POS(0.0):DB_POS(15.0))+slot->egout];
   else
     return DB2LIN_TABLE[(noise?DB_NEG(0.0):DB_NEG(15.0))+slot->egout];
@@ -1261,7 +1262,7 @@ calc_slot_cym (OPLL_SLOT * slot, uint32_t pgout_hh)
       /* the same as fmopl.c */
       ((BIT(pgout_hh,PG_BITS-8)^BIT(pgout_hh,PG_BITS-1))|BIT(pgout_hh,PG_BITS-7)) ^
       /* different from fmopl.c */
-     (BIT(slot->pgout,PG_BITS-7)&!BIT(slot->pgout,PG_BITS-5))
+      (BIT(slot->pgout,PG_BITS-7)&!BIT(slot->pgout,PG_BITS-5))
     )
     dbout = DB_NEG(3.0);
   else
@@ -1317,7 +1318,11 @@ update_output (OPLL * opll)
   for (i = 0; i < 18; i++)
   {
     calc_phase(&opll->slot[i],opll->lfo_pm);
-    calc_envelope(&opll->slot[i],opll->lfo_am);
+    if (14 <= i && (opll->reg[0xe] & 32)) {
+      calc_envelope(&opll->slot[i], opll->lfo_am, 1, NULL);
+    } else {
+      calc_envelope(&opll->slot[i], opll->lfo_am, i&1, &opll->slot[i-1]);
+    }
   }
 
   /* CH1-6 */
