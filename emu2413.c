@@ -35,7 +35,8 @@
   2004 04-10 : Version 0.61 -- Added YMF281B tone (defined by Chabin).
   2015 12-13 : Version 0.62 -- Changed own integer types to C99 stdint.h types.
   2016 09-06 : Version 0.63 -- Support per-channel output.
-  2019 10-12 : Version 0.70 -- Force to dump before keyon.
+  2019 10-12 : Version 0.70 -- Force to dump before keyon
+                            -- Dump size changed from to 8 bytes per voice.
 
   References: 
     fmopl.c        -- 1999,2000 written by Tatsuyuki Satoh (MAME development).
@@ -55,7 +56,7 @@
 #include "emu2413.h"
 
 #define OPLL_TONE_NUM 3
-static uint8_t default_inst[OPLL_TONE_NUM][(16 + 3) * 16] = {
+static uint8_t default_inst[OPLL_TONE_NUM][(16 + 3) * 8] = {
   { 
 #include "2413tone.h" 
   },
@@ -457,7 +458,7 @@ OPLL_dump2patch (const uint8_t * dump, OPLL_PATCH * patch)
 void
 OPLL_getDefaultPatch (int32_t type, int32_t num, OPLL_PATCH * patch)
 {
-  OPLL_dump2patch (default_inst[type] + num * 16, patch);
+  OPLL_dump2patch (default_inst[type] + num * 8, patch);
 }
 
 static void
@@ -479,7 +480,7 @@ OPLL_setPatch (OPLL * opll, const uint8_t * dump)
 
   for (i = 0; i < 19; i++)
   {
-    OPLL_dump2patch (dump + i * 16, patch);
+    OPLL_dump2patch (dump + i * 8, patch);
     memcpy (&opll->patch[i*2+0], &patch[0], sizeof (OPLL_PATCH));
     memcpy (&opll->patch[i*2+1], &patch[1], sizeof (OPLL_PATCH));
   }
@@ -496,14 +497,6 @@ OPLL_patch2dump (const OPLL_PATCH * patch, uint8_t * dump)
   dump[5] = (uint8_t) ((patch[1].AR << 4) + patch[1].DR);
   dump[6] = (uint8_t) ((patch[0].SL << 4) + patch[0].RR);
   dump[7] = (uint8_t) ((patch[1].SL << 4) + patch[1].RR);
-  dump[8] = 0;
-  dump[9] = 0;
-  dump[10] = 0;
-  dump[11] = 0;
-  dump[12] = 0;
-  dump[13] = 0;
-  dump[14] = 0;
-  dump[15] = 0;
 }
 
 /************************************************************
