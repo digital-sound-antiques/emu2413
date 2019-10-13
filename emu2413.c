@@ -1,6 +1,6 @@
 /***********************************************************************************
 
-  emu2413.c -- YM2413 emulator written by Mitsutaka Okazaki 2001
+  emu2413.c -- YM2413 emulator written by Mitsutaka Okazaki 2001-2019
 
   2001 01-08 : Version 0.10 -- 1st version.
   2001 01-15 : Version 0.20 -- semi-public version.
@@ -35,16 +35,20 @@
   2004 04-10 : Version 0.61 -- Added YMF281B tone (defined by Chabin).
   2015 12-13 : Version 0.62 -- Changed own integer types to C99 stdint.h types.
   2016 09-06 : Version 0.63 -- Support per-channel output.
+  2019 05-24 : Version 0.65 -- Fix YM2413 and VRC7 patches.
   2019 10-13 : Version 0.70 -- Force to dump before keyon
                             -- Dump size changed from to 8 bytes per voice.
-                            -- Fixed snare, hi-hat, top-cym volume.
+                            -- Replaced snare, hi-hat, top-cym generator,
+                                 with reference to Jarek Burczynski's ymf262.c. 
 
   References: 
     fmopl.c        -- 1999,2000 written by Tatsuyuki Satoh (MAME development).
     fmopl.c(fixed) -- (C) 2002 Jarek Burczynski.
+    ymf262.c       -- Jarek Burczynski.
     s_opl.c        -- 2001 written by Mamiya (NEZplug development).
     fmgen.cpp      -- 1999,2000 written by cisc.
     fmpac.ill      -- 2000 created by NARUTO.
+    VRC7 tones     -- https://siliconpr0n.org/archive/doku.php?id=vendor:yamaha:opl2#opll_vrc7_patch_format
     MSX-Datapack
     YMU757 data sheet
     YM2143 data sheet
@@ -1226,72 +1230,59 @@ calc_slot_tom (OPLL_SLOT * slot)
     return 0;
 
   return DB2LIN_TABLE[slot->sintbl[slot->pgout] + slot->egout];
-
 }
+
+
+/* Specify phase offset directly based on 10-bit (1024-length) sine table */
+#define _PD(phase) ((PG_BITS<10)?(phase>>(10-PG_BITS)):(phase<<(PG_BITS-10)))
 
 /* SNARE */
 static inline int32_t
 calc_slot_snare (OPLL_SLOT * slot, uint32_t noise)
 {
   if(slot->egout>=(DB_MUTE-1))
-    return 0;
-  
+    return 0; 
+
+  uint32_t phase;
   if(BIT(slot->pgout,PG_BITS-2))
-    return DB2LIN_TABLE[(noise?DB_POS(0.0):DB_POS(48.0))+slot->egout];
+    phase = noise ? 0x300 : 0x200;
   else
-    return DB2LIN_TABLE[(noise?DB_NEG(0.0):DB_NEG(48.0))+slot->egout];
+    phase = noise ? 0x100 : 0x000;
+
+  return DB2LIN_TABLE[slot->sintbl[_PD(phase)] + slot->egout];
 }
 
-/* 
-  TOP-CYM 
- */
+static inline uint8_t short_noise(uint32_t pg1, uint32_t pg2) {
+  return 
+    (BIT(pg1,PG_BITS-8)^BIT(pg1,PG_BITS-3))
+    ||BIT(pg1,PG_BITS-7)
+    ||(BIT(pg2,PG_BITS-7)^BIT(pg2,PG_BITS-5));
+}
+
+/* TOP-CYM */
 static inline int32_t
 calc_slot_cym (OPLL_SLOT * slot, uint32_t pgout_hh)
 {
-  uint32_t dbout;
+  if(slot->egout>=(DB_MUTE-1))
+    return 0; 
 
-  if (slot->egout >= (DB_MUTE - 1)) 
-    return 0;
-  else if( 
-      ((BIT(pgout_hh,PG_BITS-8)^BIT(pgout_hh,PG_BITS-1))|BIT(pgout_hh,PG_BITS-7)) ^
-      (BIT(slot->pgout,PG_BITS-7)&!BIT(slot->pgout,PG_BITS-5))
-    )
-    dbout = DB_NEG(3.0);
-  else
-    dbout = DB_POS(3.0);
-
-  return DB2LIN_TABLE[dbout + slot->egout];
+  uint32_t phase = short_noise(pgout_hh, slot->pgout) ? 0x300 : 0x100;  
+  return DB2LIN_TABLE[slot->sintbl[_PD(phase)] + slot->egout];
 }
 
-/* 
-  HI-HAT 
-*/
+/* HI-HAT */
 static inline int32_t
 calc_slot_hat (OPLL_SLOT *slot, int32_t pgout_cym, uint32_t noise)
 {
-  uint32_t dbout;
+  if(slot->egout>=(DB_MUTE-1))
+    return 0; 
 
-  if (slot->egout >= (DB_MUTE - 1)) 
-    return 0;
-  else if( 
-      ((BIT(slot->pgout,PG_BITS-8)^BIT(slot->pgout,PG_BITS-1))|BIT(slot->pgout,PG_BITS-7)) ^
-      (BIT(pgout_cym,PG_BITS-7)&!BIT(pgout_cym,PG_BITS-5))
-    )
-  {
-    if(noise)
-      dbout = DB_NEG(6.0);
-    else
-      dbout = DB_NEG(3.0);
-  }
+  uint32_t phase;
+  if(short_noise(slot->pgout, pgout_cym))
+    phase = noise ? 0x2d0 : 0x234;
   else
-  {
-    if(noise)
-      dbout = DB_POS(6.0);
-    else
-      dbout = DB_POS(3.0);
-  }
-
-  return DB2LIN_TABLE[dbout + slot->egout];
+    phase = noise ? 0x34 : 0xd0;
+  return DB2LIN_TABLE[slot->sintbl[_PD(phase)] + slot->egout];
 }
 
 static void
