@@ -220,17 +220,36 @@ Min (int32_t i, int32_t j)
     return j;
 }
 
-/* Table for AR to LogCurve. */
+/* Table for Attack envelope curve. This is an approximation, still different from real YM2413. */
 static void
 makeAdjustTable (void)
 {
   int32_t i;
-
-  AR_ADJUST_TABLE[0] = (1 << EG_BITS) - 1;
-  for (i = 1; i < (1<<EG_BITS); i++)
-    AR_ADJUST_TABLE[i] = (uint16_t) ((double) (1<<EG_BITS)-1 - ((1<<EG_BITS)-1)*log(i)/log(127));
+  for (i = 0; i < (1<<EG_BITS); i++)
+    if (i < 8 << (EG_BITS-7)) {
+      AR_ADJUST_TABLE[i] = 127 << (EG_BITS-7);
+    } else if (i < 20 << (EG_BITS-7)) {
+      AR_ADJUST_TABLE[i] = 95 << (EG_BITS-7);
+    } else if(i < 32 << (EG_BITS-7)) {
+      AR_ADJUST_TABLE[i] = 73 << (EG_BITS-7);
+    } else if(i < 44 << (EG_BITS-7)) {
+      AR_ADJUST_TABLE[i] = 54 << (EG_BITS-7);
+    } else if(i < 56 << (EG_BITS-7)) {
+      AR_ADJUST_TABLE[i] = 40 << (EG_BITS-7);
+    } else if(i < 68 << (EG_BITS-7)) {
+      AR_ADJUST_TABLE[i] = 28 << (EG_BITS-7);
+    } else if(i < 80 << (EG_BITS-7)) {
+      AR_ADJUST_TABLE[i] = 20 << (EG_BITS-7);
+    } else if(i < 92 << (EG_BITS-7)) {
+      AR_ADJUST_TABLE[i] = 13 << (EG_BITS-7);
+    } else if(i < 104 << (EG_BITS-7)) {
+      AR_ADJUST_TABLE[i] = 9 << (EG_BITS-7);
+    } else if(i < 116 << (EG_BITS-7)) {
+      AR_ADJUST_TABLE[i] = 5 << (EG_BITS-7);
+    } else {
+      AR_ADJUST_TABLE[i] = 1 << (EG_BITS-7);
+    }
 }
-
 
 /* Table for dB(0 -- (1<<DB_BITS)-1) to Liner(0 -- DB2LIN_AMP_WIDTH) */
 static void
