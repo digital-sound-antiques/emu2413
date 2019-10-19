@@ -39,7 +39,9 @@
   2019 10-13 : Version 0.70 -- Force to dump before keyon
                             -- Dump size changed from to 8 bytes per voice.
                             -- Replaced snare, hi-hat, top-cym generator,
-                                 with reference to Jarek Burczynski's ymf262.c. 
+                                 with reference to Jarek Burczynski's ymf262.c.
+  2019 10-20 : Version 0.71 -- Fix too strong LPF on rate conversion.
+                            -- Improve shape of envelope in attack phase.
 
   References: 
     fmopl.c        -- 1999,2000 written by Tatsuyuki Satoh (MAME development).
