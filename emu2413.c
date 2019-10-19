@@ -963,7 +963,9 @@ OPLL_reset (OPLL * opll)
   opll->oplltime = 0;
   for (i = 0; i < 14; i++)
     opll->pan[i] = 2;
-
+  
+  for (i =0; i< 15; i++)
+    opll->ch_out[i] = 0;
 }
 
 /* Force Refresh (When external program changes some parameters). */
@@ -1334,7 +1336,7 @@ update_output (OPLL * opll)
     if (!(opll->mask & OPLL_MASK_HH) && (MOD(opll,7)->eg_mode != FINISH))
       opll->ch_out[10] += calc_slot_hat (MOD(opll,7), CAR(opll,8)->pgout, opll->noise_seed&1) * RHYTHM_VOL_MULT;
     if (!(opll->mask & OPLL_MASK_SD) && (CAR(opll,7)->eg_mode != FINISH))
-      opll->ch_out[11] -= calc_slot_snare (CAR(opll,7), opll->noise_seed&1) * RHYTHM_VOL_MULT;
+      opll->ch_out[11] += calc_slot_snare (CAR(opll,7), opll->noise_seed&1) * RHYTHM_VOL_MULT;
   }
 
   /* CH9 */
@@ -1348,76 +1350,116 @@ update_output (OPLL * opll)
     if (!(opll->mask & OPLL_MASK_TOM) && (MOD(opll,8)->eg_mode != FINISH))
       opll->ch_out[12] += calc_slot_tom (MOD(opll,8)) * RHYTHM_VOL_MULT;
     if (!(opll->mask & OPLL_MASK_CYM) && (CAR(opll,8)->eg_mode != FINISH))
-      opll->ch_out[13] -= calc_slot_cym (CAR(opll,8), MOD(opll,7)->pgout) * RHYTHM_VOL_MULT;
+      opll->ch_out[13] += calc_slot_cym (CAR(opll,8), MOD(opll,7)->pgout) * RHYTHM_VOL_MULT;
   }
-
-  /* Always calc average of two samples */
-  for (i=0;i<15;i++) {
-    opll->ch_out[i] >>= 1;
-  }
-
 }
 
-static inline int16_t
-mix_output(OPLL *opll) {
+inline static void
+flush_output(OPLL *opll) 
+{
   int i;
-  opll->out = opll->ch_out[0];
-  for (i=1;i<15;i++) {
-    opll->out += opll->ch_out[i];
+  for(i=0;i<15;i++)
+    opll->ch_out[i] = 0;
+}
+
+inline static void
+divide_output(OPLL *opll, int div)
+{
+  int i;
+  for(i=0;i<15;i++)
+    opll->ch_out[i] /= div;
+}
+
+inline static int32_t
+mix_output(OPLL *opll) 
+{
+  int32_t out = 0;
+  int i;
+  
+  for(i=0;i<15;i++) 
+    out += opll->ch_out[i];
+  return out;
+}
+
+inline static void 
+mix_output_stereo(OPLL *opll, int32_t out[2]) 
+{
+  int i;
+  out[0] = out[1] = 0;
+  for(i=0;i<15;i++) {
+    if (opll->pan[i]&1)
+      out[1] += opll->ch_out[i];
+    if (opll->pan[i]&2)
+      out[0] += opll->ch_out[i];
   }
-  return (int16_t)opll->out;
 }
 
 int16_t
 OPLL_calc (OPLL * opll)
 {
+  int count = 0;
+  int16_t next = 0, prev = 0;
+
   if (!opll->quality)
   {
+    flush_output(opll);
     update_output(opll);
     return mix_output(opll);
   }
 
-  while (opll->realstep > opll->oplltime)
-  {
-    opll->oplltime += opll->opllstep;
-    update_output(opll);
-  }
-  opll->oplltime -= opll->realstep;
-  
-  return mix_output(opll);
-}
+  prev = mix_output(opll);
 
-static inline void
-mix_output_stereo(OPLL *opll, int32_t out[2]) {
-  int ch;
-  out[0] = out[1] = 0;
-  for(ch=0;ch<15;ch++) {
-    if(opll->pan[ch]&1)
-      out[1] += opll->ch_out[ch];
-    if(opll->pan[ch]&2)
-      out[0] += opll->ch_out[ch];
+  if (opll->realstep > opll->oplltime) {
+    flush_output(opll);
+    while (opll->realstep > opll->oplltime)
+    {
+      opll->oplltime += opll->opllstep;
+      update_output(opll);
+      count++;
+    }
+    divide_output(opll, count);
   }
-  opll->out = (out[0] + out[1]) >> 1;
+
+  opll->oplltime -= opll->realstep;
+  next = mix_output(opll);
+  opll->out = (int16_t) (((double) next * (opll->opllstep - opll->oplltime) 
+                        + (double) prev * opll->oplltime) / opll->opllstep); 
+  return opll->out;
 }
 
 void
 OPLL_calc_stereo (OPLL * opll, int32_t out[2])
 {
+  int count = 0;
+  int32_t prev[2], next[2];
+
   if (!opll->quality)
   {
+    flush_output(opll);
     update_output(opll);
     mix_output_stereo(opll, out);
     return;
   }
 
-  while (opll->realstep > opll->oplltime)
-  {
-    opll->oplltime += opll->opllstep;
-    update_output(opll);
+  mix_output_stereo(opll, prev);
+
+  if (opll->realstep > opll->oplltime) {
+    flush_output(opll);
+    while (opll->realstep > opll->oplltime)
+    {
+      opll->oplltime += opll->opllstep;
+      update_output(opll);
+      count++;
+    }
+    divide_output(opll, count);
   }
   opll->oplltime -= opll->realstep;
 
-  mix_output_stereo(opll, out);
+  mix_output_stereo(opll, next);
+  out[0] = (int16_t) (((double) next[0] * (opll->opllstep - opll->oplltime) 
+                        + (double) prev[0] * opll->oplltime) / opll->opllstep);
+  out[1] = (int16_t) (((double) next[1] * (opll->opllstep - opll->oplltime) 
+                        + (double) prev[1] * opll->oplltime) / opll->opllstep); 
 }
 
 uint32_t
