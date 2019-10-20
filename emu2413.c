@@ -43,6 +43,7 @@
   2019 10-20 : Version 0.71 -- Fix too strong LPF on rate conversion.
                             -- Improve shape of envelope in attack phase.
   2019 10-21 : Version 0.72 -- Fix critical bug on force damp routine.
+                            -- Fix top-cym, hi-hat waveform and white noise freq.
 
   References: 
     fmopl.c        -- 1999,2000 written by Tatsuyuki Satoh (MAME development).
@@ -785,6 +786,7 @@ update_rhythm_mode (OPLL * opll)
     if (!((opll->slot_on_flag[SLOT_HH] && opll->slot_on_flag[SLOT_SD]) | (opll->reg[0x0e] & 32)))
     {
       opll->slot[SLOT_HH].type = 0;
+      opll->slot[SLOT_HH].pg_keep = 0;
       opll->slot[SLOT_HH].eg_mode = FINISH;
       opll->slot[SLOT_SD].eg_mode = FINISH;
       setPatch (opll, 7, opll->reg[0x37] >> 4);
@@ -794,6 +796,7 @@ update_rhythm_mode (OPLL * opll)
   {
     opll->patch_number[7] = 17;
     opll->slot[SLOT_HH].type = 1;
+    opll->slot[SLOT_HH].pg_keep = 1;
     opll->slot[SLOT_HH].eg_mode = FINISH;
     opll->slot[SLOT_SD].eg_mode = FINISH;
     setSlotPatch (&opll->slot[SLOT_HH], &opll->patch[17 * 2 + 0]);
@@ -805,6 +808,7 @@ update_rhythm_mode (OPLL * opll)
     if (!((opll->slot_on_flag[SLOT_CYM] && opll->slot_on_flag[SLOT_TOM]) | (opll->reg[0x0e] & 32)))
     {
       opll->slot[SLOT_TOM].type = 0;
+      opll->slot[SLOT_CYM].pg_keep = 0;
       opll->slot[SLOT_TOM].eg_mode = FINISH;
       opll->slot[SLOT_CYM].eg_mode = FINISH;
       setPatch (opll, 8, opll->reg[0x38] >> 4);
@@ -814,6 +818,7 @@ update_rhythm_mode (OPLL * opll)
   {
     opll->patch_number[8] = 18;
     opll->slot[SLOT_TOM].type = 1;
+    opll->slot[SLOT_CYM].pg_keep = 1;
     opll->slot[SLOT_TOM].eg_mode = FINISH;
     opll->slot[SLOT_CYM].eg_mode = FINISH;
     setSlotPatch (&opll->slot[SLOT_TOM], &opll->patch[18 * 2 + 0]);
@@ -853,9 +858,10 @@ OPLL_copyPatch (OPLL * opll, int32_t num, OPLL_PATCH * patch)
 ***********************************************************/
 
 static void
-OPLL_SLOT_reset (OPLL_SLOT * slot, int type)
+OPLL_SLOT_reset (OPLL_SLOT * slot, int number)
 {
-  slot->type = type;
+  slot->type = number%2;
+  slot->pg_keep = 0;
   slot->sintbl = waveform[0];
   slot->phase = 0;
   slot->dphase = 0;
@@ -969,7 +975,7 @@ OPLL_reset (OPLL * opll)
   opll->mask = 0;
 
   for (i = 0; i <18; i++)
-    OPLL_SLOT_reset(&opll->slot[i], i%2);
+    OPLL_SLOT_reset(&opll->slot[i], i);
 
   for (i = 0; i < 9; i++)
   {
@@ -986,7 +992,7 @@ OPLL_reset (OPLL * opll)
   for (i = 0; i < 14; i++)
     opll->pan[i] = 2;
   
-  for (i =0; i< 15; i++)
+  for (i = 0; i < 15; i++)
     opll->ch_out[i] = 0;
 }
 
@@ -1088,7 +1094,7 @@ calc_phase (OPLL_SLOT * slot, int32_t lfo)
 static void
 update_noise (OPLL * opll)
 {
-   if(opll->noise_seed&1) opll->noise_seed ^= 0x8003020;
+   if(opll->noise_seed&1) opll->noise_seed ^= (0x8003020>>2);
    opll->noise_seed >>= 1;
 }
 
@@ -1110,7 +1116,7 @@ calc_envelope (OPLL_SLOT * slot, int32_t lfo, int master, OPLL_SLOT * slave_slot
   case ATTACK:
     egout = AR_ADJUST_TABLE[HIGHBITS (slot->eg_phase, EG_DP_BITS - EG_BITS)];
     slot->eg_phase += slot->eg_dphase;
-    if((EG_DP_WIDTH & slot->eg_phase)||(slot->patch->AR==15))
+    if((EG_DP_WIDTH <= slot->eg_phase)||(slot->patch->AR==15))
     {
       egout = 0;
       slot->eg_phase = 0;
@@ -1291,7 +1297,7 @@ calc_slot_cym (OPLL_SLOT * slot, uint32_t pgout_hh)
   if(slot->egout>=(DB_MUTE-1))
     return 0; 
 
-  uint32_t phase = short_noise(pgout_hh, slot->pgout) ? 0x300 : 0x100;  
+  uint32_t phase = short_noise(pgout_hh, slot->pgout) ? 0x200 : 0x100;  
   return DB2LIN_TABLE[slot->sintbl[_PD(phase)] + slot->egout];
 }
 
@@ -1324,10 +1330,11 @@ update_output (OPLL * opll)
   for (i = 0; i < 18; i++)
   {
     calc_phase(&opll->slot[i],opll->lfo_pm);
-    if (14 <= i && (opll->reg[0xe] & 32)) {
-      calc_envelope(&opll->slot[i], opll->lfo_am, 1, NULL);
-    } else {
+        
+    if (i < 14 || (opll->reg[0xe] & 32) == 0) {
       calc_envelope(&opll->slot[i], opll->lfo_am, i&1, &opll->slot[i-1]);
+    } else {
+      calc_envelope(&opll->slot[i], opll->lfo_am, 1, NULL);
     }
   }
 

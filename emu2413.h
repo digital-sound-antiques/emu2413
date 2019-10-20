@@ -21,7 +21,7 @@ typedef struct __OPLL_SLOT {
 
   OPLL_PATCH *patch;  
 
-  int32_t type ;          /* 0 : modulator 1 : carrier */
+  int32_t type ;      /* 0: modulator 1: carrier */
 
   /* OUTPUT */
   int32_t feedback ;
@@ -44,6 +44,8 @@ typedef struct __OPLL_SLOT {
   uint32_t eg_phase ;   /* Phase */
   uint32_t eg_dphase ;  /* Phase increment amount */
   uint32_t egout ;      /* output */
+
+  uint8_t pg_keep;    /* 0: reset phase when key off 1: keep phase when key off */
 
 } OPLL_SLOT ;
 
