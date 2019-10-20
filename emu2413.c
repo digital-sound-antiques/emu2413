@@ -36,12 +36,13 @@
   2015 12-13 : Version 0.62 -- Changed own integer types to C99 stdint.h types.
   2016 09-06 : Version 0.63 -- Support per-channel output.
   2019 05-24 : Version 0.65 -- Fix YM2413 and VRC7 patches.
-  2019 10-13 : Version 0.70 -- Force to dump before keyon
+  2019 10-13 : Version 0.70 -- Force to damp before keyon
                             -- Dump size changed from to 8 bytes per voice.
                             -- Replaced snare, hi-hat, top-cym generator,
                                  with reference to Jarek Burczynski's ymf262.c.
   2019 10-20 : Version 0.71 -- Fix too strong LPF on rate conversion.
                             -- Improve shape of envelope in attack phase.
+  2019 10-21 : Version 0.72 -- Fix critical bug on force damp routine.
 
   References: 
     fmopl.c        -- 1999,2000 written by Tatsuyuki Satoh (MAME development).
@@ -1166,17 +1167,18 @@ calc_envelope (OPLL_SLOT * slot, int32_t lfo, int master, OPLL_SLOT * slave_slot
       if (master) {
         slot->eg_mode = ATTACK;
         slot->eg_phase = 0;
-        slot->phase = 0;
+        if (!slot->pg_keep)
+          slot->phase = 0;
         if (slave_slot) {
           slave_slot->eg_mode = ATTACK;
           slave_slot->eg_phase = 0;
-          slave_slot->phase = 0;
+          if(!slave_slot->pg_keep)
+            slave_slot->phase = 0;
+          UPDATE_EG(slave_slot);
         }
-      } else {
-        slot->eg_phase = FINISH;
+        UPDATE_EG(slot);
       }
       egout = (1 << EG_BITS) - 1;
-      UPDATE_EG(slot);
     }
     break;
 
