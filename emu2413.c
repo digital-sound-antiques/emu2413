@@ -87,7 +87,7 @@ static uint8_t default_inst[OPLL_TONE_NUM][(16 + 3) * 8] = {
 #define DP_BASE_BITS (DP_BITS - PG_BITS)
 
 /* Dynamic range (Accuracy of sin table) */
-#define DB_BITS 8
+#define DB_BITS 9
 #define DB_STEP (48.0/(1<<DB_BITS))
 #define DB_MUTE (1<<DB_BITS)
 
@@ -1297,7 +1297,7 @@ calc_slot_cym (OPLL_SLOT * slot, uint32_t pgout_hh)
   if(slot->egout>=(DB_MUTE-1))
     return 0; 
 
-  uint32_t phase = short_noise(pgout_hh, slot->pgout) ? 0x200 : 0x100;  
+  uint32_t phase = short_noise(pgout_hh, slot->pgout) ? 0x280 : 0x100;
   return DB2LIN_TABLE[slot->sintbl[_PD(phase)] + slot->egout];
 }
 
@@ -1366,7 +1366,7 @@ update_output (OPLL * opll)
     if (!(opll->mask & OPLL_MASK_HH) && (MOD(opll,7)->eg_mode != FINISH))
       opll->ch_out[10] += calc_slot_hat (MOD(opll,7), CAR(opll,8)->pgout, opll->noise_seed&1) * RHYTHM_VOL_MULT;
     if (!(opll->mask & OPLL_MASK_SD) && (CAR(opll,7)->eg_mode != FINISH))
-      opll->ch_out[11] += calc_slot_snare (CAR(opll,7), opll->noise_seed&1) * RHYTHM_VOL_MULT;
+      opll->ch_out[11] -= calc_slot_snare (CAR(opll,7), opll->noise_seed&1) * RHYTHM_VOL_MULT;
   }
 
   /* CH9 */
@@ -1380,7 +1380,7 @@ update_output (OPLL * opll)
     if (!(opll->mask & OPLL_MASK_TOM) && (MOD(opll,8)->eg_mode != FINISH))
       opll->ch_out[12] += calc_slot_tom (MOD(opll,8)) * RHYTHM_VOL_MULT;
     if (!(opll->mask & OPLL_MASK_CYM) && (CAR(opll,8)->eg_mode != FINISH))
-      opll->ch_out[13] += calc_slot_cym (CAR(opll,8), MOD(opll,7)->pgout) * RHYTHM_VOL_MULT;
+      opll->ch_out[13] -= calc_slot_cym (CAR(opll,8), MOD(opll,7)->pgout) * RHYTHM_VOL_MULT;
   }
 }
 
