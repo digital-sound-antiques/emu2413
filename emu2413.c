@@ -44,6 +44,7 @@
                             -- Improve shape of envelope in attack phase.
   2019 10-21 : Version 0.72 -- Fix critical bug on force damp routine.
                             -- Fix top-cym, hi-hat waveform and white noise freq.
+  2019 10-22 : Version 0.73 -- Fix top-cym volume.
 
   References: 
     fmopl.c        -- 1999,2000 written by Tatsuyuki Satoh (MAME development).
