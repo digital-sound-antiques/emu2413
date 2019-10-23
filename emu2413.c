@@ -45,6 +45,7 @@
   2019 10-21 : Version 0.72 -- Fix critical bug on force damp routine.
                             -- Fix top-cym, hi-hat waveform and white noise freq.
   2019 10-22 : Version 0.73 -- Fix top-cym volume.
+  2019 10-24 : Version 0.74 -- Fix broken AM and PM waves.
 
   References: 
     fmopl.c        -- 1999,2000 written by Tatsuyuki Satoh (MAME development).
@@ -125,15 +126,15 @@ static uint8_t default_inst[OPLL_TONE_NUM][(16 + 3) * 8] = {
 /* Bits for Pitch and Amp modulator */
 #define PM_PG_BITS 8
 #define PM_PG_WIDTH (1<<PM_PG_BITS)
-#define PM_DP_BITS 16
+#define PM_DP_BITS 22
 #define PM_DP_WIDTH (1<<PM_DP_BITS)
 #define AM_PG_BITS 8
 #define AM_PG_WIDTH (1<<AM_PG_BITS)
-#define AM_DP_BITS 16
+#define AM_DP_BITS 22
 #define AM_DP_WIDTH (1<<AM_DP_BITS)
 
 /* PM table is calcurated by PM_AMP * pow(2,PM_DEPTH*sin(x)/1200) */
-#define PM_AMP_BITS 8
+#define PM_AMP_BITS 12
 #define PM_AMP (1<<PM_AMP_BITS)
 
 /* PM speed(Hz) and depth(cent) */
@@ -309,13 +310,13 @@ makeSinTable (void)
 }
 
 static double saw(double phase)
-{
-  if(phase <= PI/2)
-    return phase * 2 / PI ;
-  else if(phase <= PI*3/2)
-    return 2.0 - ( phase * 2 / PI );
+{  
+  if (phase < PI/2)
+    return 0.0 + 1.0 * phase / (PI/2);
+  else if(phase < 2*PI*3/4)
+    return 1.0 - 2.0 * (phase - (PI/2)) / PI;
   else
-    return -4.0 + phase * 2 / PI;
+    return -1.0 + 1.0 * (phase - (2*PI*3/4)) / (PI/2);
 }
 
 /* Table for Pitch Modulator */
@@ -335,7 +336,7 @@ makeAmTable (void)
   int32_t i;
 
   for (i = 0; i < AM_PG_WIDTH; i++)
-    amtable[i] = (int32_t) ((double) AM_DEPTH / 2 / DB_STEP * (1.0 + saw (2.0 * PI * i / PM_PG_WIDTH)));
+    amtable[i] = (int32_t) ((double) AM_DEPTH / 2 / DB_STEP * (1.0 + saw (2.0 * PI * i / AM_PG_WIDTH)));
 }
 
 /* Phase increment counter table */
@@ -441,18 +442,13 @@ makeDphaseDRTable (void)
 static void
 makeRksTable (void)
 {
-
-  int32_t fnum8, block, KR;
+  int32_t fnum8, block;
 
   for (fnum8 = 0; fnum8 < 2; fnum8++)
-    for (block = 0; block < 8; block++)
-      for (KR = 0; KR < 2; KR++)
-      {
-        if (KR != 0)
-          rksTable[fnum8][block][KR] = (block << 1) + fnum8;
-        else
-          rksTable[fnum8][block][KR] = block >> 1;
-      }
+    for (block = 0; block < 8; block++) {
+      rksTable[fnum8][block][1] = (block << 1) + fnum8;
+      rksTable[fnum8][block][0] = block >> 1;
+    }
 }
 
 void
