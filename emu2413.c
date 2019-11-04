@@ -1,5 +1,5 @@
 /**
- * emu2413 v0.9.0
+ * emu2413 v1.0.0-alpha
  * https://github.com/digital-sound-antiques/emu2413
  * Copyright (C) 2001-2019 Mitsutaka Okazaki
  */
@@ -906,15 +906,17 @@ void OPLL_forceRefresh(OPLL *opll) {
   }
 }
 
-void OPLL_set_rate(OPLL *opll, uint32_t rate) {
+void OPLL_setRate(OPLL *opll, uint32_t rate) {
   opll->rate = rate;
   reset_rate_conversion_params(opll);
 }
 
-void OPLL_set_quality(OPLL *opll, uint8_t q) {
+void OPLL_setQuality(OPLL *opll, uint8_t q) {
   // No Effects.
   // This module always synthesizes output at the same rate with real chip (clock/72).
 }
+
+void OPLL_setChipMode(OPLL *opll, uint8_t mode) { opll->vrc7_mode = mode; }
 
 void OPLL_writeReg(OPLL *opll, uint32_t reg, uint32_t data) {
   int32_t i, v, ch;
@@ -1110,9 +1112,9 @@ void OPLL_writeIO(OPLL *opll, uint32_t adr, uint32_t val) {
     opll->adr = val;
 }
 
-void OPLL_set_pan(OPLL *opll, uint32_t ch, uint32_t pan) { opll->pan[ch & 15] = pan & 3; }
+void OPLL_setPan(OPLL *opll, uint32_t ch, uint32_t pan) { opll->pan[ch & 15] = pan & 3; }
 
-void OPLL_dump2patch(const uint8_t *dump, OPLL_PATCH *patch) {
+void OPLL_dumpToPatch(const uint8_t *dump, OPLL_PATCH *patch) {
   patch[0].AM = (dump[0] >> 7) & 1;
   patch[1].AM = (dump[1] >> 7) & 1;
   patch[0].PM = (dump[0] >> 6) & 1;
@@ -1152,7 +1154,7 @@ void OPLL_setPatch(OPLL *opll, const uint8_t *dump) {
   }
 }
 
-void OPLL_patch2dump(const OPLL_PATCH *patch, uint8_t *dump) {
+void OPLL_patchToDump(const OPLL_PATCH *patch, uint8_t *dump) {
   dump[0] = (uint8_t)((patch[0].AM << 7) + (patch[0].PM << 6) + (patch[0].EG << 5) + (patch[0].KR << 4) + patch[0].ML);
   dump[1] = (uint8_t)((patch[1].AM << 7) + (patch[1].PM << 6) + (patch[1].EG << 5) + (patch[1].KR << 4) + patch[1].ML);
   dump[2] = (uint8_t)((patch[0].KL << 6) + patch[0].TL);
@@ -1167,7 +1169,7 @@ void OPLL_copyPatch(OPLL *opll, int32_t num, OPLL_PATCH *patch) {
   memcpy(&opll->patch[num], patch, sizeof(OPLL_PATCH));
 }
 
-void OPLL_reset_patch(OPLL *opll, int32_t type) {
+void OPLL_resetPatch(OPLL *opll, int32_t type) {
   for (int i = 0; i < 19 * 2; i++)
     OPLL_copyPatch(opll, i, &default_patch[type % OPLL_TONE_NUM][i]);
 }
@@ -1194,7 +1196,7 @@ int16_t OPLL_calc(OPLL *opll) {
   return opll->out;
 }
 
-void OPLL_calc_stereo(OPLL *opll, int32_t out[2]) {
+void OPLL_calcStereo(OPLL *opll, int32_t out[2]) {
   int count = 0;
   int32_t prev[2], next[2];
 
@@ -1236,54 +1238,4 @@ uint32_t OPLL_toggleMask(OPLL *opll, uint32_t mask) {
     return ret;
   } else
     return 0;
-}
-
-/***************************************
- *
- *           for VGMplay
- *
- **************************************/
-void OPLL_SetMuteMask(OPLL *opll, uint32_t MuteMask) {
-  unsigned char CurChn;
-  uint32_t ChnMsk;
-
-  for (CurChn = 0; CurChn < 14; CurChn++) {
-    if (CurChn < 9) {
-      ChnMsk = OPLL_MASK_CH(CurChn);
-    } else {
-      switch (CurChn) {
-      case 9:
-        ChnMsk = OPLL_MASK_BD;
-        break;
-      case 10:
-        ChnMsk = OPLL_MASK_SD;
-        break;
-      case 11:
-        ChnMsk = OPLL_MASK_TOM;
-        break;
-      case 12:
-        ChnMsk = OPLL_MASK_CYM;
-        break;
-      case 13:
-        ChnMsk = OPLL_MASK_HH;
-        break;
-      default:
-        ChnMsk = 0;
-        break;
-      }
-    }
-    if ((MuteMask >> CurChn) & 0x01)
-      opll->mask |= ChnMsk;
-    else
-      opll->mask &= ~ChnMsk;
-  }
-
-  return;
-}
-
-void OPLL_SetChipMode(OPLL *opll, uint8_t mode) {
-  // Enable/Disable VRC7 Mode (with only 6 instead of 9 channels and no rhythm
-  // part)
-  opll->vrc7_mode = mode;
-  return;
 }

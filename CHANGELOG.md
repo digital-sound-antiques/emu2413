@@ -1,3 +1,13 @@
+# v1.0.0-alpha
+
+Playback quality has been changed drastically.
+
+- Change dB-based log and exp tables to log2-based.
+- Improve pitch and amplitude modulator.
+- Improve envelope generator.
+- Fix the problem where key-on flags are not shared between rhythm and melody slots.
+- Semantic versioning.
+
 # v0.74 (2019 10-24)
 
 - Fix broken AM and PM waves.
@@ -40,7 +50,7 @@
 
 # v0.30 (2001 01-16)
 
-- 1st beta release
+- 1st beta release.
 
 # v0.20 (2001 01-15)
 

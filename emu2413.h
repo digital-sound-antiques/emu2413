@@ -123,10 +123,11 @@ void OPLL_delete(OPLL *);
 
 /* Setup */
 void OPLL_reset(OPLL *);
-void OPLL_reset_patch(OPLL *, int32_t);
-void OPLL_set_rate(OPLL *opll, uint32_t r);
-void OPLL_set_quality(OPLL *opll, uint8_t q);
-void OPLL_set_pan(OPLL *, uint32_t ch, uint32_t pan);
+void OPLL_resetPatch(OPLL *, int32_t);
+void OPLL_setRate(OPLL *opll, uint32_t r);
+void OPLL_setQuality(OPLL *opll, uint8_t q);
+void OPLL_setPan(OPLL *, uint32_t ch, uint32_t pan);
+void OPLL_setChipMode(OPLL *opll, uint8_t mode);
 
 /* Port/Register access */
 void OPLL_writeIO(OPLL *, uint32_t reg, uint32_t val);
@@ -134,7 +135,7 @@ void OPLL_writeReg(OPLL *, uint32_t reg, uint32_t val);
 
 /* Synthsize */
 int16_t OPLL_calc(OPLL *);
-void OPLL_calc_stereo(OPLL *, int32_t out[2]);
+void OPLL_calcStereo(OPLL *, int32_t out[2]);
 
 /* Misc */
 void OPLL_setPatch(OPLL *, const uint8_t *dump);
@@ -142,16 +143,22 @@ void OPLL_copyPatch(OPLL *, int32_t, OPLL_PATCH *);
 void OPLL_forceRefresh(OPLL *);
 
 /* Utility */
-void OPLL_dump2patch(const uint8_t *dump, OPLL_PATCH *patch);
-void OPLL_patch2dump(const OPLL_PATCH *patch, uint8_t *dump);
+void OPLL_dumpToPatch(const uint8_t *dump, OPLL_PATCH *patch);
+void OPLL_patchToDump(const OPLL_PATCH *patch, uint8_t *dump);
 void OPLL_getDefaultPatch(int32_t type, int32_t num, OPLL_PATCH *);
 
 /* Channel Mask */
 uint32_t OPLL_setMask(OPLL *, uint32_t mask);
 uint32_t OPLL_toggleMask(OPLL *, uint32_t mask);
 
-void OPLL_SetMuteMask(OPLL *opll, uint32_t MuteMask);
-void OPLL_SetChipMode(OPLL *opll, uint8_t Mode);
+/* For compatibility */
+#define OPLL_set_rate OPLL_setRate
+#define OPLL_set_quality OPLL_setQuality
+#define OPLL_set_pan OPLL_setPan
+#define OPLL_calc_stereo OPLL_calcStereo
+#define OPLL_reset_patch OPLL_resetPatch
+#define OPLL_dump2patch OPLL_dumpToPatch
+#define OPLL_patch2dump OPLL_patchToDump
 
 #ifdef __cplusplus
 }
