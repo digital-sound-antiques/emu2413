@@ -1,10 +1,5 @@
-/* YM2413 TONES by Mitsutaka Okazaki 
- * The following patches are from VRC7's tone.
- * - @5: Clarinet
- * - @7: Trumpet 
- * - Drums: BD/SD/HH/TM/TC
- * https://siliconpr0n.org/archive/doku.php?id=vendor:yamaha:opl2#opll_vrc7_patch_format
- */
+// clang-format off
+/* YM2413 presets by Mitsutaka Okazaki */
 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, // 0: Original
 0x61,0x61,0x1E,0x17,0xF0,0x7F,0x00,0x17, // 1: Violin
 0x13,0x41,0x17,0x0E,0xFF,0xFF,0x23,0x13, // 2: Guitar
