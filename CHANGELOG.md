@@ -1,8 +1,9 @@
 # v1.0.0-alpha
 
-Playback quality has been changed drastically.
+Major Update: playback quality has been drastically improved.
 
-- Change dB-based log and exp tables to log2-based.
+- Change dB-based sine and exp tables to log2-based.
+- Improve damper rate when key-on.
 - Improve pitch and amplitude modulator.
 - Improve envelope generator.
 - Fix the problem where key-on flags are not shared between rhythm and melody slots.
