@@ -589,7 +589,7 @@ static void calc_envelope_cycle(OPLL_SLOT *slot, OPLL_SLOT *slave_slot) {
           slave_slot->eg_ar_out = 0;
           slave_slot->eg_out = EG_MUTE;
           slave_slot->pg_phase = slave_slot->pg_keep ? slave_slot->pg_phase : 0;
-          UPDATE_EG(slot);
+          UPDATE_EG(slave_slot);
         }
       }
     }
