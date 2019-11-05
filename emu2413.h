@@ -50,6 +50,8 @@ typedef struct __OPLL_SLOT {
   uint8_t eg_ar_out;
   uint32_t eg_out; /* output */
 
+  uint32_t update_requests;
+
 } OPLL_SLOT;
 
 /* Mask */
@@ -66,7 +68,7 @@ typedef struct __OPLL {
   uint32_t clk;
   uint32_t rate;
 
-  uint8_t vrc7_mode;
+  uint8_t chip_mode;
 
   uint32_t adr;
   int32_t out;
