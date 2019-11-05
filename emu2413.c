@@ -44,31 +44,32 @@ static uint8_t default_inst[OPLL_TONE_NUM][(16 + 3) * 8] = {
 #define SL_STEP 3.0
 #define SL_BITS 4
 
-#if 1 /* OPLL */
-#define PG_BITS 9 /* sine table width = 512 samples */
-#else
-#define PG_BITS 10 /* sine table width = 1024 samples */
+/* damper speed before key-on. key-scale affects. */
+#define DAMPER_RATE 12
+
+#if 1              /* OPLL*/
+#define PG_BITS 9  /* 2^9 = 512 length sine table */
+#else              /* OPLx */
+#define PG_BITS 10 /* 2^10 = 1024 length sine table */
 #endif
 #define PG_WIDTH (1 << PG_BITS)
 
-#if 0 /* LOW Q */
-#define SIN_AMP_BITS 7
-#define EXP_AMP_BITS 9
-#define XB_BITS 10
-#else /* OPLx */
+/* exp table setup (similar to OPLx, not verified on OPLL) */
 #define SIN_AMP_BITS 8
 #define EXP_AMP_BITS 10
+
+#define SIN_AMP (1 << SIN_AMP_BITS) /* amplitude range of wave table */
+#define EXP_AMP (1 << EXP_AMP_BITS) /* amplitude range of exp table */
+
+/* final operator output depth */
 #define XB_BITS 11
-#endif
-#define SIN_AMP (1<<SIN_AMP_BITS)
-#define EXP_AMP (1<<EXP_AMP_BITS)
 
 /* dynamic range conversion */
 #define EG2XB(d) ((d) << (XB_BITS - EG_BITS))
 #define TL2EG(d) ((d) << (EG_BITS - TL_BITS))
 #define SL2EG(d) ((d) << (EG_BITS - SL_BITS))
 
-/* envelope phase primary counter */
+/* envelope phase counter size */
 #define EG_DP_BITS 15
 
 /* phase increment table */
@@ -88,18 +89,18 @@ static int16_t exp_table[256];
 #define PM_DP_BITS 22
 #define PM_DP_WIDTH (1 << PM_DP_BITS)
 
-/* offset to f-num, approximately ±13.75cents depth. */
-static int8_t pm_table[][PM_PG_WIDTH] = {
+/* offset to f-num, rough approximation of 13.75 cents depth. */
+static int8_t pm_table[4][PM_PG_WIDTH] = {
     {0, 1, 0, 0, 0, 0, 0, 0},    // F-NUM 00xxxxxxx
     {1, 1, 1, 0, -1, -1, -1, 0}, // F-NUM 01xxxxxxx
     {1, 2, 1, 0, -1, -2, -1, 0}, // F-NUM 10xxxxxxx
     {1, 3, 1, 0, -1, -3, -1, 0}, // F-NUM 11xxxxxxx
 };
 
-/* Amplitude LFO Table */
+/* amplitude lfo table */
 /* The following envelop pattern is verified on real YM2413. */
 /* Each element is repeated 64 cycles. */
-static uint8_t am_table[] = {
+static uint8_t am_table[210] = {
     0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1,  1,  1,  1,  1,  2,  2,  2,  2,  2,  2,  2,  2,  3,  3,  3,
     3,  3,  3,  3,  3,  4,  4,  4,  4,  4,  4,  4,  4,  5,  5,  5,  5,  5,  5,  5,  5,  6,  6,  6,  6,  6,  6,
     6,  6,  7,  7,  7,  7,  7,  7,  7,  7,  8,  8,  8,  8,  8,  8,  8,  8,  9,  9,  9,  9,  9,  9,  9,  9,  10,
@@ -110,8 +111,8 @@ static uint8_t am_table[] = {
     2,  2,  2,  2,  2,  2,  1,  1,  1,  1,  1,  1,  1,  1,  0,  0,  0,  0,  0,  0,  0, //
 };
 
-/* Envelope secondary increment table. */
-static uint8_t eg_incr_map[][4][8] = {
+/* envelope delta table */
+static uint8_t eg_delta_table_map[][4][8] = {
     {
         {0, 1, 0, 1, 0, 1, 0, 1}, // RM 0..12 RL 0
         {0, 1, 1, 1, 0, 1, 0, 1}, // RM 0..12 RL 1
@@ -131,8 +132,8 @@ static uint8_t eg_incr_map[][4][8] = {
         {2, 4, 4, 4, 2, 4, 4, 4}, // RM 14 RL 3
     },
 };
-static uint8_t eg_incr_15[8] = {4, 4, 4, 4, 4, 4, 4, 4}; // RM 15 RL *
-static uint8_t eg_incr_0[8] = {0, 0, 0, 0, 0, 0, 0, 0};  // RM 0 RL *
+static uint8_t eg_delta_table_15[8] = {4, 4, 4, 4, 4, 4, 4, 4}; // RM 15 RL *
+static uint8_t eg_delta_table_0[8] = {0, 0, 0, 0, 0, 0, 0, 0};  // RM 0 RL *
 
 /* [WIP] attach envelope curve table */
 /* The following patterns are observed on real YM2413 chip, being different from OPL. */
@@ -145,8 +146,8 @@ static OPLL_PATCH null_patch = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 static OPLL_PATCH default_patch[OPLL_TONE_NUM][(16 + 3) * 2];
 
 /* KSL + TL Table */
-static uint32_t tll_table[16][8][1 << TL_BITS][4];
-static int32_t rks_table[2][8][2];
+static uint32_t tll_table[8 * 16][1 << TL_BITS][4];
+static int32_t rks_table[8 * 2][2];
 
 /***************************************************
 
@@ -159,8 +160,6 @@ static inline int32_t min(int32_t i, int32_t j) {
   else
     return j;
 }
-
-
 
 static void makeExpTable(void) {
   int x;
@@ -216,13 +215,13 @@ static void makeTllTable(void) {
       for (TL = 0; TL < 64; TL++)
         for (KL = 0; KL < 4; KL++) {
           if (KL == 0) {
-            tll_table[fnum][block][TL][KL] = TL2EG(TL);
+            tll_table[(block << 4) | fnum][TL][KL] = TL2EG(TL);
           } else {
             tmp = (int32_t)(kltable[fnum] - dB2(3.000) * (7 - block));
             if (tmp <= 0)
-              tll_table[fnum][block][TL][KL] = TL2EG(TL);
+              tll_table[(block << 4) | fnum][TL][KL] = TL2EG(TL);
             else
-              tll_table[fnum][block][TL][KL] = (uint32_t)((tmp >> (3 - KL)) / EG_STEP) + TL2EG(TL);
+              tll_table[(block << 4) | fnum][TL][KL] = (uint32_t)((tmp >> (3 - KL)) / EG_STEP) + TL2EG(TL);
           }
         }
 }
@@ -230,8 +229,8 @@ static void makeTllTable(void) {
 static void makeRksTable(void) {
   for (int fnum8 = 0; fnum8 < 2; fnum8++)
     for (int block = 0; block < 8; block++) {
-      rks_table[fnum8][block][1] = (block << 1) + fnum8;
-      rks_table[fnum8][block][0] = block >> 1;
+      rks_table[(block << 1) | fnum8][1] = (block << 1) + fnum8;
+      rks_table[(block << 1) | fnum8][0] = block >> 1;
     }
 }
 
@@ -289,7 +288,7 @@ static inline int get_eg_rate(OPLL_SLOT *slot) {
       return 7;
     }
   case SETTLE:
-    return 12;
+    return DAMPER_RATE;
   case FINISH:
     return 0;
   default:
@@ -300,7 +299,7 @@ static inline int get_eg_rate(OPLL_SLOT *slot) {
 static inline void update_eg_incr(OPLL_SLOT *slot) {
   const int rate = get_eg_rate(slot);
   if (rate == 0) {
-    slot->eg_incr_table = eg_incr_0;
+    slot->eg_delta_table = eg_delta_table_0;
     slot->eg_dphase = 0;
     return;
   }
@@ -309,16 +308,16 @@ static inline void update_eg_incr(OPLL_SLOT *slot) {
   const int RL = slot->rks & 3;
 
   if (RM < 13) {
-    slot->eg_incr_table = eg_incr_map[0][RL];
+    slot->eg_delta_table = eg_delta_table_map[0][RL];
     slot->eg_dphase = 1 << (RM + 2);
   } else if (RM == 13) {
-    slot->eg_incr_table = eg_incr_map[1][RL];
+    slot->eg_delta_table = eg_delta_table_map[1][RL];
     slot->eg_dphase = 1 << 15;
   } else if (RM == 14) {
-    slot->eg_incr_table = eg_incr_map[2][RL];
+    slot->eg_delta_table = eg_delta_table_map[2][RL];
     slot->eg_dphase = 1 << 15;
   } else {
-    slot->eg_incr_table = eg_incr_15;
+    slot->eg_delta_table = eg_delta_table_15;
     slot->eg_dphase = 1 << 15;
   }
 }
@@ -339,13 +338,13 @@ static void commit_slot_update(OPLL_SLOT *slot) {
   }
   if (slot->update_requests & UPDATE_TLL) {
     if (slot->type == 0) {
-      slot->tll = tll_table[slot->fnum >> 5][slot->block][slot->patch->TL][slot->patch->KL];
+      slot->tll = tll_table[slot->blk_fnum >> 5][slot->patch->TL][slot->patch->KL];
     } else {
-      slot->tll = tll_table[slot->fnum >> 5][slot->block][slot->volume][slot->patch->KL];
+      slot->tll = tll_table[slot->blk_fnum >> 5][slot->volume][slot->patch->KL];
     }
   }
   if (slot->update_requests & UPDATE_RKS) {
-    slot->rks = rks_table[slot->fnum >> 8][slot->block][slot->patch->KR];
+    slot->rks = rks_table[slot->blk_fnum >> 8][slot->patch->KR];
   }
   if (slot->update_requests & UPDATE_EG) {
     update_eg_incr(slot);
@@ -362,16 +361,15 @@ static void reset_slot(OPLL_SLOT *slot, int number) {
   slot->output[0] = 0;
   slot->output[1] = 0;
   slot->feedback = 0;
-  slot->eg_incr_index = 0;
-  slot->eg_incr_table = eg_incr_0;
+  slot->eg_delta_index = 0;
+  slot->eg_delta_table = eg_delta_table_0;
   slot->eg_state = FINISH;
   slot->eg_phase = 0;
   slot->eg_dphase = 0;
   slot->rks = 0;
   slot->tll = 0;
   slot->sustine = 0;
-  slot->fnum = 0;
-  slot->block = 0;
+  slot->blk_fnum = 0;
   slot->volume = 0;
   slot->pg_out = 0;
   slot->eg_out = EG_MUTE;
@@ -419,7 +417,7 @@ static inline void update_key_status(OPLL *opll) {
   }
 
   uint32_t updated_status = opll->slot_key_status ^ new_slot_key_status;
-
+  // updated_status &= 3;
   if (updated_status) {
     for (int i = 0; i < 18; i++)
       if (BIT(updated_status, i)) {
@@ -469,18 +467,22 @@ static inline void set_slot_volume(OPLL_SLOT *slot, int volume) {
 
 /* set F-Number ( fnum : 9bit ) */
 static inline void set_fnumber(OPLL *opll, int ch, int fnum) {
-  CAR(opll, ch)->fnum = fnum;
-  MOD(opll, ch)->fnum = fnum;
-  request_update(CAR(opll, ch), UPDATE_EG | UPDATE_RKS | UPDATE_TLL);
-  request_update(MOD(opll, ch), UPDATE_EG | UPDATE_RKS | UPDATE_TLL);
+  OPLL_SLOT *car = CAR(opll, ch);
+  OPLL_SLOT *mod = MOD(opll, ch);
+  car->blk_fnum = (car->blk_fnum & 0xe00) | (fnum & 0x1ff);
+  mod->blk_fnum = (mod->blk_fnum & 0xe00) | (fnum & 0x1ff);
+  request_update(car, UPDATE_EG | UPDATE_RKS | UPDATE_TLL);
+  request_update(mod, UPDATE_EG | UPDATE_RKS | UPDATE_TLL);
 }
 
 /* set Block data (block : 3bit ) */
 static inline void set_block(OPLL *opll, int ch, int block) {
-  CAR(opll, ch)->block = block;
-  MOD(opll, ch)->block = block;
-  request_update(CAR(opll, ch), UPDATE_EG | UPDATE_RKS | UPDATE_TLL);
-  request_update(MOD(opll, ch), UPDATE_EG | UPDATE_RKS | UPDATE_TLL);
+  OPLL_SLOT *car = CAR(opll, ch);
+  OPLL_SLOT *mod = MOD(opll, ch);
+  car->blk_fnum = ((block & 7) << 9) | (car->blk_fnum & 0x1ff);
+  mod->blk_fnum = ((block & 7) << 9) | (mod->blk_fnum & 0x1ff);
+  request_update(car, UPDATE_EG | UPDATE_RKS | UPDATE_TLL);
+  request_update(mod, UPDATE_EG | UPDATE_RKS | UPDATE_TLL);
 }
 
 static inline void update_rhythm_mode(OPLL *opll) {
@@ -568,12 +570,11 @@ static void update_short_noise(OPLL *opll) {
 }
 
 static inline void calc_phase(OPLL_SLOT *slot, int32_t pm_phase) {
-  const int16_t blk_fnum = ((slot->block << 9) | slot->fnum);
   if (slot->patch->PM) {
-    const int8_t pm = pm_table[slot->fnum >> 7][pm_phase >> (PM_DP_BITS - PM_PG_BITS)];
-    slot->pg_phase += dphase_table[min(0xfff, blk_fnum + pm)][slot->patch->ML];
+    const int8_t pm = pm_table[(slot->blk_fnum >> 7) & 3][pm_phase >> (PM_DP_BITS - PM_PG_BITS)];
+    slot->pg_phase += dphase_table[min(0xfff, slot->blk_fnum + pm)][slot->patch->ML];
   } else {
-    slot->pg_phase += dphase_table[blk_fnum][slot->patch->ML];
+    slot->pg_phase += dphase_table[slot->blk_fnum][slot->patch->ML];
   }
 
   slot->pg_phase &= (DP_WIDTH - 1);
@@ -583,12 +584,12 @@ static inline void calc_phase(OPLL_SLOT *slot, int32_t pm_phase) {
 
 static void calc_envelope_cycle(OPLL_SLOT *slot, OPLL_SLOT *slave_slot) {
 
-  slot->eg_incr_index++;
+  slot->eg_delta_index++;
 
   switch (slot->eg_state) {
   case ATTACK:
-    slot->eg_ar_out += slot->eg_incr_table[slot->eg_incr_index % 8];
-    slot->eg_out = eg_ar_curve_table[slot->eg_ar_out];
+    slot->eg_ar_index += slot->eg_delta_table[slot->eg_delta_index % 8];
+    slot->eg_out = eg_ar_curve_table[slot->eg_ar_index];
     if ((slot->patch->AR == 15) || slot->eg_out == 0) {
       slot->eg_state = DECAY;
       slot->eg_out = 0;
@@ -597,7 +598,7 @@ static void calc_envelope_cycle(OPLL_SLOT *slot, OPLL_SLOT *slave_slot) {
     break;
 
   case DECAY:
-    slot->eg_out += slot->eg_incr_table[slot->eg_incr_index % 8];
+    slot->eg_out += slot->eg_delta_table[slot->eg_delta_index % 8];
     if (slot->eg_out >= SL2EG(slot->patch->SL)) {
       slot->eg_state = slot->patch->EG ? SUSHOLD : SUSTINE;
       slot->eg_out = SL2EG(slot->patch->SL);
@@ -614,7 +615,7 @@ static void calc_envelope_cycle(OPLL_SLOT *slot, OPLL_SLOT *slave_slot) {
 
   case SUSTINE:
   case RELEASE:
-    slot->eg_out += slot->eg_incr_table[slot->eg_incr_index % 8];
+    slot->eg_out += slot->eg_delta_table[slot->eg_delta_index % 8];
     if (slot->eg_out >= EG_MUTE) {
       slot->eg_state = FINISH;
       slot->eg_out = EG_MUTE;
@@ -623,20 +624,20 @@ static void calc_envelope_cycle(OPLL_SLOT *slot, OPLL_SLOT *slave_slot) {
     break;
 
   case SETTLE:
-    slot->eg_out += slot->eg_incr_table[slot->eg_incr_index % 8];
+    slot->eg_out += slot->eg_delta_table[slot->eg_delta_index % 8];
     if (slot->eg_out >= EG_MUTE) {
       if (slot->type == 1) {
         slot->eg_state = ATTACK;
-        slot->eg_incr_index = 0;
-        slot->eg_ar_out = 0;
+        slot->eg_delta_index = 0;
+        slot->eg_ar_index = 0;
         slot->eg_out = EG_MUTE;
         slot->pg_phase = slot->pg_keep ? slot->pg_phase : 0;
         request_update(slot, UPDATE_EG);
 
         if (slave_slot) {
           slave_slot->eg_state = ATTACK;
-          slave_slot->eg_incr_index = 0;
-          slave_slot->eg_ar_out = 0;
+          slave_slot->eg_delta_index = 0;
+          slave_slot->eg_ar_index = 0;
           slave_slot->eg_out = EG_MUTE;
           slave_slot->pg_phase = slave_slot->pg_keep ? slave_slot->pg_phase : 0;
           request_update(slave_slot, UPDATE_EG);
@@ -656,19 +657,25 @@ static void calc_envelope_cycle(OPLL_SLOT *slot, OPLL_SLOT *slave_slot) {
 }
 
 static void calc_envelope(OPLL_SLOT *slot, OPLL_SLOT *slave_slot) {
-  slot->eg_phase += slot->eg_dphase;
-  if (slot->eg_phase >= (1 << EG_DP_BITS)) {
+  if (slot->eg_dphase == 0) {
     calc_envelope_cycle(slot, slave_slot);
-    slot->eg_phase -= (1 << EG_DP_BITS);
+  } else {
+    slot->eg_phase += slot->eg_dphase;
+    if (slot->eg_phase >= (1 << EG_DP_BITS)) {
+      calc_envelope_cycle(slot, slave_slot);
+      slot->eg_phase -= (1 << EG_DP_BITS);
+    }
   }
 }
 
-inline static int32_t exp_tbl_ex(int32_t x) {
+inline static int32_t exp_table_ex(int32_t x) {
   const int BASE = (EXP_AMP << 2);
   x = BASE - min(x, BASE - 1);
 
-  /** int32_t output = (int32_t)round((pow(2, (double)x / SIN_AMP) - 1) * EXP_AMP); */
-  int32_t output = ((exp_table[x & ((1<<SIN_AMP_BITS)-1)] + EXP_AMP) << (x >> SIN_AMP_BITS)) - EXP_AMP;
+  /* calculate exp(x) = round((pow(2,x/256)-1) * 1024) for any x */
+  /* Since 2^x = 2^modf(x) * 2^floor(x) always follows, it is possible to approximate exp(x)
+   * by reference of exp_table(x) defined only on range 0<= x < 256. */
+  int32_t output = ((exp_table[x & ((1 << SIN_AMP_BITS) - 1)] + EXP_AMP) << (x >> SIN_AMP_BITS)) - EXP_AMP;
 
   return output >> EXP_AMP_BITS;
 }
@@ -676,9 +683,9 @@ inline static int32_t exp_tbl_ex(int32_t x) {
 static int32_t to_linear(int32_t h, OPLL_SLOT *slot, uint32_t am) {
   uint32_t value = EG2XB(slot->eg_out + slot->tll) + am;
   if (h >= 0)
-    return exp_tbl_ex(h + value);
+    return exp_table_ex(h + value);
   else
-    return -exp_tbl_ex(-h + value);
+    return -exp_table_ex(-h + value);
 }
 
 static inline int32_t calc_slot_car(OPLL *opll, int ch, int32_t fm) {
@@ -1090,7 +1097,7 @@ void OPLL_writeReg(OPLL *opll, uint32_t reg, uint32_t data) {
     set_sustine(opll, ch, (data >> 5) & 1);
     update_key_status(opll);
     /* update rhythm mode here because key-off of rhythm instrument is deferred until key-on bit is down */
-    update_rhythm_mode(opll); 
+    update_rhythm_mode(opll);
     break;
 
   case 0x30:
