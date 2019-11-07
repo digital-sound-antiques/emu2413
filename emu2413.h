@@ -7,9 +7,7 @@
 extern "C" {
 #endif
 
-#define PI 3.14159265358979323846
-
-typedef enum __OPLL_EG_STATE { ATTACK, DECAY, SUSHOLD, SUSTINE, RELEASE, FINISH, SETTLE } OPLL_EG_STATE;
+typedef enum __OPLL_EG_STATE { ATTACK, DECAY, SUSHOLD, SUSTINE, RELEASE, FINISH, DAMP } OPLL_EG_STATE;
 
 enum OPLL_TONE_ENUM { OPLL_2413_TONE = 0, OPLL_VRC7_TONE = 1, OPLL_281B_TONE = 2 };
 
@@ -30,11 +28,13 @@ typedef struct __OPLL_SLOT {
   int32_t output[2]; /* output value, latest and previous. */
 
   /* phase generator (pg) */
-  int16_t *wave_table; /* wave table */
+  uint16_t *wave_table; /* wave table */
   uint32_t pg_phase;   /* pg phase */
   uint32_t pg_out;     /* pg output, as index of wave table */
   uint8_t pg_keep;     /* if 1, pg_phase is preserved when key-on */
   uint16_t blk_fnum;   /* (block << 9) | f-number */
+  uint16_t fnum;       /* f-number (9 bits) */
+  uint8_t blk;         /* block (3 bits) */
 
   /* envelope generator (eg) */
   uint8_t eg_state;        /* current state */
@@ -84,7 +84,7 @@ typedef struct __OPLL {
 
   int32_t am_phase;
   int32_t am_dphase;
-  int32_t lfo_am;
+  uint8_t lfo_am;
 
   uint32_t noise_seed;
   uint8_t noise;
@@ -103,7 +103,7 @@ typedef struct __OPLL {
    * 9:BD 10:HH 11:SD, 12:TOM, 13:CYM
    * 14:reserved for dac
    */
-  int16_t ch_out[15];
+  int32_t ch_out[15];
 
 } OPLL;
 

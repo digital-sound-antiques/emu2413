@@ -1,7 +1,7 @@
 /**
- * emu2413 v1.0.0-alpha
+ * emu2413 v1.0.0-alpha2
  * https://github.com/digital-sound-antiques/emu2413
- * Copyright (C) 2001-2019 Mitsutaka Okazaki
+ * Copyright (C) 2019 Mitsutaka Okazaki
  */
 #include "emu2413.h"
 #include <math.h>
@@ -23,11 +23,11 @@ static uint8_t default_inst[OPLL_TONE_NUM][(16 + 3) * 8] = {
 };
 
 /* phase increment counter */
-#define DP_BITS 18
+#define DP_BITS 19
 #define DP_WIDTH (1 << DP_BITS)
 #define DP_BASE_BITS (DP_BITS - PG_BITS)
 
-#define wave2_2pi(e) ((e) >> (16 - PG_BITS))
+#define wave2_2pi(e) (e >> 2)
 #define wave2_4pi(e) (wave2_2pi(e) << 1)
 #define wave2_8pi(e) (wave2_4pi(e) << 1)
 
@@ -47,41 +47,21 @@ static uint8_t default_inst[OPLL_TONE_NUM][(16 + 3) * 8] = {
 /* damper speed before key-on. key-scale affects. */
 #define DAMPER_RATE 12
 
-#if 1              /* OPLL*/
-#define PG_BITS 9  /* 2^9 = 512 length sine table */
-#else              /* OPLx */
-#define PG_BITS 10 /* 2^10 = 1024 length sine table */
-#endif
-#define PG_WIDTH (1 << PG_BITS)
-
-/* exp table setup (similar to OPLx, not verified on OPLL) */
-#define SIN_AMP_BITS 8
-#define EXP_AMP_BITS 10
-
-#define SIN_AMP (1 << SIN_AMP_BITS) /* amplitude range of wave table */
-#define EXP_AMP (1 << EXP_AMP_BITS) /* amplitude range of exp table */
-
-/* final operator output depth */
-#define XB_BITS 11
-
-/* dynamic range conversion */
-#define EG2XB(d) ((d) << (XB_BITS - EG_BITS))
 #define TL2EG(d) ((d) << (EG_BITS - TL_BITS))
 #define SL2EG(d) ((d) << (EG_BITS - SL_BITS))
 
 /* envelope phase counter size */
 #define EG_DP_BITS 15
 
-/* phase increment table */
-static uint32_t dphase_table[8 * 512][16];
-
 /* sine table */
-static int16_t fullsin_table[PG_WIDTH];
-static int16_t halfsin_table[PG_WIDTH];
-static int16_t *wave_table_map[2] = {fullsin_table, halfsin_table};
+#define PG_BITS 10 /* 2^10 = 1024 length sine table */
+#define PG_WIDTH (1 << PG_BITS)
+static uint16_t fullsin_table[PG_WIDTH];
+static uint16_t halfsin_table[PG_WIDTH];
+static uint16_t *wave_table_map[2] = {fullsin_table, halfsin_table};
 
-/* log to linear exponential table */
-static int16_t exp_table[256];
+/* log to linear exponential table (similar to OPLx) */
+static uint16_t exp_table[256];
 
 /* pitch modulator */
 #define PM_PG_BITS 3
@@ -89,12 +69,18 @@ static int16_t exp_table[256];
 #define PM_DP_BITS 22
 #define PM_DP_WIDTH (1 << PM_DP_BITS)
 
-/* offset to f-num, rough approximation of 13.75 cents depth. */
-static int8_t pm_table[4][PM_PG_WIDTH] = {
-    {0, 1, 0, 0, 0, 0, 0, 0},    // F-NUM 00xxxxxxx
-    {1, 1, 1, 0, -1, -1, -1, 0}, // F-NUM 01xxxxxxx
-    {1, 2, 1, 0, -1, -2, -1, 0}, // F-NUM 10xxxxxxx
-    {1, 3, 1, 0, -1, -3, -1, 0}, // F-NUM 11xxxxxxx
+/* offset to fnum, rough approximation of 14 cents depth. */
+static int8_t pm_table[8][PM_PG_WIDTH] = {
+    // clang-format off
+    { 0, 0, 0, 0, 0, 0, 0, 0, }, // fnum = 000xxxxx
+    { 0, 0, 1, 0, 0, 0,-1, 0, }, // fnum = 001xxxxx
+    { 0, 1, 2, 1, 0,-1,-2,-1, }, // fnum = 010xxxxx
+    { 0, 1, 3, 1, 0,-1,-3,-1, }, // fnum = 011xxxxx
+    { 0, 2, 4, 2, 0,-2,-4,-2, }, // fnum = 100xxxxx
+    { 0, 2, 5, 2, 0,-2,-5,-2, }, // fnum = 101xxxxx
+    { 0, 3, 6, 3, 0,-3,-6,-3, }, // fnum = 110xxxxx
+    { 0, 3, 7, 3, 0,-3,-7,-3, }, // fnum = 111xxxxx
+    // clang-format on
 };
 
 /* amplitude lfo table */
@@ -135,9 +121,17 @@ static uint8_t eg_delta_table_map[][4][8] = {
 static uint8_t eg_delta_table_15[8] = {4, 4, 4, 4, 4, 4, 4, 4}; // RM 15 RL *
 static uint8_t eg_delta_table_0[8] = {0, 0, 0, 0, 0, 0, 0, 0};  // RM 0 RL *
 
+static uint32_t ml_table[16] = {1,     1 * 2, 2 * 2,  3 * 2,  4 * 2,  5 * 2,  6 * 2,  7 * 2,
+                                8 * 2, 9 * 2, 10 * 2, 10 * 2, 12 * 2, 12 * 2, 15 * 2, 15 * 2};
+
+#define dB2(x) ((x)*2)
+static double kl_table[16] = {dB2(0.000),  dB2(9.000),  dB2(12.000), dB2(13.875), dB2(15.000), dB2(16.125),
+                              dB2(16.875), dB2(17.625), dB2(18.000), dB2(18.750), dB2(19.125), dB2(19.500),
+                              dB2(19.875), dB2(20.250), dB2(20.625), dB2(21.000)};
+
 /* [WIP] attach envelope curve table */
 /* The following patterns are observed on real YM2413 chip, being different from OPL. */
-static uint8_t eg_ar_curve_table[] = {96, 72, 54, 40, 28, 20, 13, 9, 5, 1, 0, 0, 0, 0, 0, 0};
+static uint8_t eg_ar_curve_table[] = {127, 96, 72, 54, 40, 28, 20, 13, 9, 5, 1, 0, 0, 0, 0, 0, 0};
 
 /* empty instrument */
 static OPLL_PATCH null_patch = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
@@ -163,15 +157,14 @@ static inline int32_t min(int32_t i, int32_t j) {
 
 static void makeExpTable(void) {
   int x;
-  for (x = 0; x < SIN_AMP; x++) {
-    exp_table[x] = round((pow(2, (double)x / SIN_AMP) - 1) * EXP_AMP);
+  for (x = 0; x < 256; x++) {
+    exp_table[x] = round((exp2((double)x / 256.0) - 1) * 1024);
   }
 }
 
 static void makeSinTable(void) {
   for (int x = 0; x < PG_WIDTH / 4; x++) {
-    fullsin_table[x] = (int16_t)(-log2(sin((x + 0.5) * PI / (PG_WIDTH / 4) / 2)) * SIN_AMP) + 1;
-    // +1 to distinguish positive and negative zero.
+    fullsin_table[x] = (uint16_t)(-log2(sin((x + 0.5) * M_PI / (PG_WIDTH / 4) / 2)) * 256);
   }
 
   for (int x = 0; x < PG_WIDTH / 4; x++) {
@@ -179,51 +172,38 @@ static void makeSinTable(void) {
   }
 
   for (int x = 0; x < PG_WIDTH / 2; x++) {
-    fullsin_table[PG_WIDTH / 2 + x] = -fullsin_table[x];
+    fullsin_table[PG_WIDTH / 2 + x] = 0x8000 | fullsin_table[x];
   }
 
   for (int x = 0; x < PG_WIDTH / 2; x++)
     halfsin_table[x] = fullsin_table[x];
 
   for (int x = PG_WIDTH / 2; x < PG_WIDTH; x++)
-    halfsin_table[x] = fullsin_table[0];
-}
-
-static void makeDphaseTable() {
-  uint32_t fnum, block, ML;
-  uint32_t mltable[16] = {1,     1 * 2, 2 * 2,  3 * 2,  4 * 2,  5 * 2,  6 * 2,  7 * 2,
-                          8 * 2, 9 * 2, 10 * 2, 10 * 2, 12 * 2, 12 * 2, 15 * 2, 15 * 2};
-
-  for (fnum = 0; fnum < 512; fnum++)
-    for (block = 0; block < 8; block++)
-      for (ML = 0; ML < 16; ML++)
-        dphase_table[(block << 9) | fnum][ML] = ((fnum * mltable[ML]) << block) >> (20 - DP_BITS);
+    halfsin_table[x] = 0xfff;
 }
 
 static void makeTllTable(void) {
-#define dB2(x) ((x)*2)
-
-  static double kltable[16] = {dB2(0.000),  dB2(9.000),  dB2(12.000), dB2(13.875), dB2(15.000), dB2(16.125),
-                               dB2(16.875), dB2(17.625), dB2(18.000), dB2(18.750), dB2(19.125), dB2(19.500),
-                               dB2(19.875), dB2(20.250), dB2(20.625), dB2(21.000)};
 
   int32_t tmp;
   int32_t fnum, block, TL, KL;
 
-  for (fnum = 0; fnum < 16; fnum++)
-    for (block = 0; block < 8; block++)
-      for (TL = 0; TL < 64; TL++)
+  for (fnum = 0; fnum < 16; fnum++) {
+    for (block = 0; block < 8; block++) {
+      for (TL = 0; TL < 64; TL++) {
         for (KL = 0; KL < 4; KL++) {
           if (KL == 0) {
             tll_table[(block << 4) | fnum][TL][KL] = TL2EG(TL);
           } else {
-            tmp = (int32_t)(kltable[fnum] - dB2(3.000) * (7 - block));
+            tmp = (int32_t)(kl_table[fnum] - dB2(3.000) * (7 - block));
             if (tmp <= 0)
               tll_table[(block << 4) | fnum][TL][KL] = TL2EG(TL);
             else
               tll_table[(block << 4) | fnum][TL][KL] = (uint32_t)((tmp >> (3 - KL)) / EG_STEP) + TL2EG(TL);
           }
         }
+      }
+    }
+  }
 }
 
 static void makeRksTable(void) {
@@ -248,7 +228,6 @@ static void initializeTables() {
   makeRksTable();
   makeSinTable();
   makeDefaultPatch();
-  makeDphaseTable();
   table_initialized = 1;
 }
 
@@ -287,7 +266,7 @@ static inline int get_eg_rate(OPLL_SLOT *slot) {
     } else {
       return 7;
     }
-  case SETTLE:
+  case DAMP:
     return DAMPER_RATE;
   case FINISH:
     return 0;
@@ -370,6 +349,8 @@ static void reset_slot(OPLL_SLOT *slot, int number) {
   slot->tll = 0;
   slot->sustine = 0;
   slot->blk_fnum = 0;
+  slot->blk = 0;
+  slot->fnum = 0;
   slot->volume = 0;
   slot->pg_out = 0;
   slot->eg_out = EG_MUTE;
@@ -378,7 +359,7 @@ static void reset_slot(OPLL_SLOT *slot, int number) {
 
 static inline void slotOn(OPLL *opll, int i) {
   OPLL_SLOT *slot = &opll->slot[i];
-  slot->eg_state = SETTLE;
+  slot->eg_state = DAMP;
   request_update(slot, UPDATE_EG);
 }
 
@@ -469,18 +450,22 @@ static inline void set_slot_volume(OPLL_SLOT *slot, int volume) {
 static inline void set_fnumber(OPLL *opll, int ch, int fnum) {
   OPLL_SLOT *car = CAR(opll, ch);
   OPLL_SLOT *mod = MOD(opll, ch);
+  car->fnum = fnum;
   car->blk_fnum = (car->blk_fnum & 0xe00) | (fnum & 0x1ff);
+  mod->fnum = fnum;
   mod->blk_fnum = (mod->blk_fnum & 0xe00) | (fnum & 0x1ff);
   request_update(car, UPDATE_EG | UPDATE_RKS | UPDATE_TLL);
   request_update(mod, UPDATE_EG | UPDATE_RKS | UPDATE_TLL);
 }
 
 /* set Block data (block : 3bit ) */
-static inline void set_block(OPLL *opll, int ch, int block) {
+static inline void set_block(OPLL *opll, int ch, int blk) {
   OPLL_SLOT *car = CAR(opll, ch);
   OPLL_SLOT *mod = MOD(opll, ch);
-  car->blk_fnum = ((block & 7) << 9) | (car->blk_fnum & 0x1ff);
-  mod->blk_fnum = ((block & 7) << 9) | (mod->blk_fnum & 0x1ff);
+  car->blk = blk;
+  car->blk_fnum = ((blk & 7) << 9) | (car->blk_fnum & 0x1ff);
+  mod->blk = blk;
+  mod->blk_fnum = ((blk & 7) << 9) | (mod->blk_fnum & 0x1ff);
   request_update(car, UPDATE_EG | UPDATE_RKS | UPDATE_TLL);
   request_update(mod, UPDATE_EG | UPDATE_RKS | UPDATE_TLL);
 }
@@ -544,7 +529,7 @@ static inline void update_rhythm_mode(OPLL *opll) {
 
 static void update_ampm(OPLL *opll) {
   opll->pm_phase = (opll->pm_phase + opll->pm_dphase) & (PM_DP_WIDTH - 1);
-  opll->lfo_am = am_table[(opll->am_phase >> 6) % sizeof(am_table)] << 4;
+  opll->lfo_am = am_table[(opll->am_phase >> 6) % sizeof(am_table)];
   opll->am_phase++;
 }
 
@@ -570,15 +555,9 @@ static void update_short_noise(OPLL *opll) {
 }
 
 static inline void calc_phase(OPLL_SLOT *slot, int32_t pm_phase) {
-  if (slot->patch->PM) {
-    const int8_t pm = pm_table[(slot->blk_fnum >> 7) & 3][pm_phase >> (PM_DP_BITS - PM_PG_BITS)];
-    slot->pg_phase += dphase_table[min(0xfff, slot->blk_fnum + pm)][slot->patch->ML];
-  } else {
-    slot->pg_phase += dphase_table[slot->blk_fnum][slot->patch->ML];
-  }
-
+  const int8_t pm = slot->patch->PM ? pm_table[(slot->fnum >> 6) & 7][pm_phase >> (PM_DP_BITS - PM_PG_BITS)] : 0;
+  slot->pg_phase += (((slot->fnum & 0x1ff) * 2 + pm) * ml_table[slot->patch->ML]) << slot->blk >> 2;
   slot->pg_phase &= (DP_WIDTH - 1);
-
   slot->pg_out = slot->pg_phase >> DP_BASE_BITS;
 }
 
@@ -623,7 +602,7 @@ static void calc_envelope_cycle(OPLL_SLOT *slot, OPLL_SLOT *slave_slot) {
     }
     break;
 
-  case SETTLE:
+  case DAMP:
     slot->eg_out += slot->eg_delta_table[slot->eg_delta_index % 8];
     if (slot->eg_out >= EG_MUTE) {
       if (slot->type == 1) {
@@ -668,45 +647,38 @@ static void calc_envelope(OPLL_SLOT *slot, OPLL_SLOT *slave_slot) {
   }
 }
 
-inline static int32_t exp_table_ex(int32_t x) {
-  const int BASE = (EXP_AMP << 2);
-  x = BASE - min(x, BASE - 1);
-
-  /* calculate exp(x) = round((pow(2,x/256)-1) * 1024) for any x */
-  /* Since 2^x = 2^modf(x) * 2^floor(x) always follows, it is possible to approximate exp(x)
-   * by reference of exp_table(x) defined only on range 0<= x < 256. */
-  int32_t output = ((exp_table[x & ((1 << SIN_AMP_BITS) - 1)] + EXP_AMP) << (x >> SIN_AMP_BITS)) - EXP_AMP;
-
-  return output >> EXP_AMP_BITS;
+/* output: -4095...4095 */
+static inline int16_t lookup_exp_table(uint16_t i) {
+  /* from andete's expressoin */
+  int16_t t = (exp_table[(i & 0xff) ^ 0xff] + 1024);
+  int16_t res = t >> ((i & 0x7f00) >> 8);
+  return ((i & 0x8000) ? ~res : res) << 1;
 }
 
-static int32_t to_linear(int32_t h, OPLL_SLOT *slot, uint32_t am) {
-  uint32_t value = EG2XB(slot->eg_out + slot->tll) + am;
-  if (h >= 0)
-    return exp_table_ex(h + value);
-  else
-    return -exp_table_ex(-h + value);
+static inline int16_t to_linear(uint16_t h, OPLL_SLOT *slot, int16_t am) {
+  uint16_t att = min(127, (slot->eg_out + slot->tll + am)) << 4;
+  return lookup_exp_table(h + att);
 }
 
-static inline int32_t calc_slot_car(OPLL *opll, int ch, int32_t fm) {
+static inline int16_t calc_slot_car(OPLL *opll, int ch, int16_t fm) {
   OPLL_SLOT *slot = CAR(opll, ch);
 
   if (slot->eg_state == FINISH)
     return 0;
 
-  int32_t am = slot->patch->AM ? opll->lfo_am : 0;
+  uint8_t am = slot->patch->AM ? opll->lfo_am : 0;
 
   return to_linear(slot->wave_table[(slot->pg_out + wave2_8pi(fm)) & (PG_WIDTH - 1)], slot, am);
 }
 
-static inline int32_t calc_slot_mod(OPLL *opll, int ch) {
+static inline int16_t calc_slot_mod(OPLL *opll, int ch) {
   OPLL_SLOT *slot = MOD(opll, ch);
 
   if (slot->eg_state == FINISH)
     return 0;
 
-  int32_t fm = slot->patch->FB > 0 ? wave2_4pi(slot->feedback) >> (7 - slot->patch->FB) : 0;
-  int32_t am = slot->patch->AM ? opll->lfo_am : 0;
+  int16_t fm = slot->patch->FB > 0 ? wave2_4pi(slot->feedback) >> (7 - slot->patch->FB) : 0;
+  uint8_t am = slot->patch->AM ? opll->lfo_am : 0;
 
   slot->output[1] = slot->output[0];
   slot->output[0] = to_linear(slot->wave_table[(slot->pg_out + fm) & (PG_WIDTH - 1)], slot, am);
@@ -715,7 +687,7 @@ static inline int32_t calc_slot_mod(OPLL *opll, int ch) {
   return slot->feedback;
 }
 
-static inline int32_t calc_slot_tom(OPLL *opll) {
+static inline int16_t calc_slot_tom(OPLL *opll) {
   OPLL_SLOT *slot = MOD(opll, 8);
 
   if (slot->eg_state == FINISH)
@@ -727,7 +699,7 @@ static inline int32_t calc_slot_tom(OPLL *opll) {
 /* Specify phase offset directly based on 10-bit (1024-length) sine table */
 #define _PD(phase) ((PG_BITS < 10) ? (phase >> (10 - PG_BITS)) : (phase << (PG_BITS - 10)))
 
-static inline int32_t calc_slot_snare(OPLL *opll) {
+static inline int16_t calc_slot_snare(OPLL *opll) {
   OPLL_SLOT *slot = CAR(opll, 7);
 
   if (slot->eg_state == FINISH)
@@ -743,7 +715,7 @@ static inline int32_t calc_slot_snare(OPLL *opll) {
   return to_linear(slot->wave_table[phase], slot, 0);
 }
 
-static inline int32_t calc_slot_cym(OPLL *opll) {
+static inline int16_t calc_slot_cym(OPLL *opll) {
   OPLL_SLOT *slot = CAR(opll, 8);
 
   if (slot->eg_state == FINISH)
@@ -754,7 +726,7 @@ static inline int32_t calc_slot_cym(OPLL *opll) {
   return to_linear(slot->wave_table[phase], slot, 0);
 }
 
-static inline int32_t calc_slot_hat(OPLL *opll) {
+static inline int16_t calc_slot_hat(OPLL *opll) {
   OPLL_SLOT *slot = MOD(opll, 7);
 
   if (slot->eg_state == FINISH)
@@ -769,8 +741,8 @@ static inline int32_t calc_slot_hat(OPLL *opll) {
   return to_linear(slot->wave_table[phase], slot, 0);
 }
 
-#define _MO(x) (x >> 5)
-#define _RO(x) (x >> 4)
+#define _MO(x) (x >> 1)
+#define _RO(x) (x)
 
 static void update_slots(OPLL *opll) {
   for (int i = 0; i < 18; i++) {
