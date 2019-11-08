@@ -29,25 +29,22 @@ typedef struct __OPLL_SLOT {
 
   /* phase generator (pg) */
   uint16_t *wave_table; /* wave table */
-  uint32_t pg_phase;   /* pg phase */
-  uint32_t pg_out;     /* pg output, as index of wave table */
-  uint8_t pg_keep;     /* if 1, pg_phase is preserved when key-on */
-  uint16_t blk_fnum;   /* (block << 9) | f-number */
-  uint16_t fnum;       /* f-number (9 bits) */
-  uint8_t blk;         /* block (3 bits) */
+  uint32_t pg_phase;    /* pg phase */
+  uint32_t pg_out;      /* pg output, as index of wave table */
+  uint8_t pg_keep;      /* if 1, pg_phase is preserved when key-on */
+  uint16_t blk_fnum;    /* (block << 9) | f-number */
+  uint16_t fnum;        /* f-number (9 bits) */
+  uint8_t blk;          /* block (3 bits) */
 
   /* envelope generator (eg) */
-  uint8_t eg_state;        /* current state */
-  int32_t volume;          /* current volume */
-  uint8_t sustine;         /* sustine 1:on 0:off */
-  uint16_t tll;            /* total level + key scale level*/
-  uint8_t rks;             /* key scale offset (rks) for eg speed */
-  uint32_t eg_phase;       /* eg phase */
-  uint32_t eg_dphase;      /* eg phase delta */
-  uint8_t eg_delta_index;  /* index for eg delta table */
-  uint8_t *eg_delta_table; /* eg delta table (8 elements) */
-  uint8_t eg_ar_index;     /* index for eg attack table */
-  uint32_t eg_out;         /* eg output */
+  uint8_t eg_state;         /* current state */
+  int32_t volume;           /* current volume */
+  uint8_t sustine;          /* sustine 1:on 0:off */
+  uint16_t tll;             /* total level + key scale level*/
+  uint8_t rks;              /* key scale offset (rks) for eg speed */
+  uint8_t eg_rate;          /* eg speed rate: min(63, (ar/dr/rr << 2) + rks) */
+  uint32_t eg_shift;        /* shift for eg global counter, controls envelope speed */
+  uint32_t eg_out;          /* eg output */
 
   uint32_t update_requests; /* flags to debounce update */
 } OPLL_SLOT;
@@ -78,6 +75,8 @@ typedef struct __OPLL {
   uint8_t reg[0x40];
   uint32_t slot_key_status;
   uint8_t rhythm_mode;
+
+  uint32_t eg_counter; /* global counter for envelope */
 
   uint32_t pm_phase;
   uint32_t pm_dphase;
