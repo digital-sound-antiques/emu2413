@@ -1,5 +1,5 @@
 /**
- * emu2413 v1.0.0-alpha3
+ * emu2413 v1.0.0-alpha4
  * https://github.com/digital-sound-antiques/emu2413
  * Copyright (C) 2019 Mitsutaka Okazaki
  */
@@ -129,6 +129,7 @@ static OPLL_PATCH default_patch[OPLL_TONE_NUM][(16 + 3) * 2];
 
 ****************************************************/
 #define min(i, j) (((i) < (j)) ? (i) : (j))
+#define max(i, j) (((i) > (j)) ? (i) : (j))
 
 static void makeExpTable(void) {
   int x;
@@ -151,10 +152,10 @@ static void makeSinTable(void) {
   }
 
   for (int x = 0; x < PG_WIDTH / 2; x++)
-    halfsin_table[x] = fullsin_table[x];
+    halfsin_table[x] = 0xfff;
 
   for (int x = PG_WIDTH / 2; x < PG_WIDTH; x++)
-    halfsin_table[x] = 0xfff;
+    halfsin_table[x] = fullsin_table[x];
 }
 
 static void makeTllTable(void) {
@@ -223,18 +224,52 @@ static void initializeTables() {
 #define CAR(o, x) (&(o)->slot[((x) << 1) | 1])
 #define BIT(s, b) (((s) >> (b)) & 1)
 
+#define OPLL_DEBUG 0
+
+#if OPLL_DEBUG
+static void _debug_print_patch(OPLL_SLOT *slot) {
+  OPLL_PATCH *p = slot->patch;
+  printf("[slot#%d am:%d pm:%d eg:%d kr:%d ml:%d kl:%d tl:%d wf:%d fb:%d A:%d D:%d S:%d R:%d]\n", slot->number, //
+         p->AM, p->PM, p->EG, p->KR, p->ML,                                                                     //
+         p->KL, p->TL, p->WF, p->FB,                                                                            //
+         p->AR, p->DR, p->SL, p->RR);
+}
+
+static char *_debug_eg_state_name(OPLL_SLOT *slot) {
+  switch (slot->eg_state) {
+  case ATTACK:
+    return "attack";
+  case DECAY:
+    return "decay";
+  case SUSTAIN:
+    return "sustain";
+  case RELEASE:
+    return "release";
+  case DAMP:
+    return "damp";
+  default:
+    return "unknown";
+  }
+}
+
+static inline void _debug_print_slot_info(OPLL_SLOT *slot) {
+  char *name = _debug_eg_state_name(slot);
+  printf("[slot#%d state:%s fnum:%03x rate:%d]\n", slot->number, name, slot->blk_fnum, slot->eg_rate);
+  _debug_print_patch(slot);
+  fflush(stdout);
+}
+#endif
+
 static inline int get_parameter_rate(OPLL_SLOT *slot) {
   switch (slot->eg_state) {
   case ATTACK:
     return slot->patch->AR;
   case DECAY:
     return slot->patch->DR;
-  case SUSHOLD:
-    return 0;
-  case SUSTINE:
-    return slot->patch->RR;
+  case SUSTAIN:
+    return slot->patch->EG ? 0 : slot->patch->RR;
   case RELEASE:
-    if (slot->sustine) {
+    if (slot->sus_flag) {
       return 5;
     } else if (slot->patch->EG) {
       return slot->patch->RR;
@@ -243,8 +278,6 @@ static inline int get_parameter_rate(OPLL_SLOT *slot) {
     }
   case DAMP:
     return DAMPER_RATE;
-  case FINISH:
-    return 0;
   default:
     return 0;
   }
@@ -261,6 +294,14 @@ enum SLOT_UPDATE_FLAG {
 static inline void request_update(OPLL_SLOT *slot, int flag) { slot->update_requests |= flag; }
 
 static void commit_slot_update(OPLL_SLOT *slot) {
+
+#if OPLL_DEBUG
+  if (slot->last_eg_state != slot->eg_state) {
+    _debug_print_slot_info(slot);
+    slot->last_eg_state = slot->eg_state;
+  }
+#endif
+
   if (slot->update_requests & UPDATE_WF) {
     slot->wave_table = wave_table_map[slot->patch->WF];
   }
@@ -278,7 +319,7 @@ static void commit_slot_update(OPLL_SLOT *slot) {
   }
 
   if (slot->update_requests & (UPDATE_RKS | UPDATE_EG)) {
-    const int p_rate = get_parameter_rate(slot);
+    int p_rate = get_parameter_rate(slot);
     slot->eg_rate = (0 < p_rate) ? min(63, (p_rate << 2) + slot->rks) : 0;
     const int RM = slot->eg_rate >> 2;
     if (slot->eg_state == ATTACK) {
@@ -300,11 +341,11 @@ static void reset_slot(OPLL_SLOT *slot, int number) {
   slot->output[0] = 0;
   slot->output[1] = 0;
   slot->feedback = 0;
-  slot->eg_state = FINISH;
+  slot->eg_state = RELEASE;
   slot->eg_shift = 0;
   slot->rks = 0;
   slot->tll = 0;
-  slot->sustine = 0;
+  slot->sus_flag = 0;
   slot->blk_fnum = 0;
   slot->blk = 0;
   slot->fnum = 0;
@@ -383,11 +424,11 @@ static inline void set_slot_patch(OPLL_SLOT *slot, OPLL_PATCH *patch) {
   request_update(slot, UPDATE_ALL);
 }
 
-static inline void set_sustine(OPLL *opll, int ch, int sustine) {
-  CAR(opll, ch)->sustine = sustine;
+static inline void set_sus_flag(OPLL *opll, int ch, int flag) {
+  CAR(opll, ch)->sus_flag = flag;
   request_update(CAR(opll, ch), UPDATE_EG);
   if (MOD(opll, ch)->type) {
-    MOD(opll, ch)->sustine = sustine;
+    MOD(opll, ch)->sus_flag = flag;
     request_update(MOD(opll, ch), UPDATE_EG);
   }
 }
@@ -433,14 +474,18 @@ static inline void update_rhythm_mode(OPLL *opll) {
 
   if (opll->patch_number[6] & 0x10) {
     if (!(BIT(slot_key_status, SLOT_BD2) | new_rhythm_mode)) {
-      opll->slot[SLOT_BD1].eg_state = FINISH;
-      opll->slot[SLOT_BD2].eg_state = FINISH;
+      opll->slot[SLOT_BD1].eg_state = RELEASE;
+      opll->slot[SLOT_BD1].eg_out = EG_MUTE;
+      opll->slot[SLOT_BD2].eg_state = RELEASE;
+      opll->slot[SLOT_BD2].eg_out = EG_MUTE;
       set_patch(opll, 6, opll->reg[0x36] >> 4);
     }
   } else if (new_rhythm_mode) {
     opll->patch_number[6] = 16;
-    opll->slot[SLOT_BD1].eg_state = FINISH;
-    opll->slot[SLOT_BD2].eg_state = FINISH;
+    opll->slot[SLOT_BD1].eg_state = RELEASE;
+    opll->slot[SLOT_BD1].eg_out = EG_MUTE;
+    opll->slot[SLOT_BD2].eg_state = RELEASE;
+    opll->slot[SLOT_BD2].eg_out = EG_MUTE;
     set_slot_patch(&opll->slot[SLOT_BD1], &opll->patch[16 * 2 + 0]);
     set_slot_patch(&opll->slot[SLOT_BD2], &opll->patch[16 * 2 + 1]);
   }
@@ -449,16 +494,20 @@ static inline void update_rhythm_mode(OPLL *opll) {
     if (!((BIT(slot_key_status, SLOT_HH) && BIT(slot_key_status, SLOT_SD)) | new_rhythm_mode)) {
       opll->slot[SLOT_HH].type = 0;
       opll->slot[SLOT_HH].pg_keep = 0;
-      opll->slot[SLOT_HH].eg_state = FINISH;
-      opll->slot[SLOT_SD].eg_state = FINISH;
+      opll->slot[SLOT_HH].eg_state = RELEASE;
+      opll->slot[SLOT_HH].eg_out = EG_MUTE;
+      opll->slot[SLOT_SD].eg_state = RELEASE;
+      opll->slot[SLOT_SD].eg_out = EG_MUTE;
       set_patch(opll, 7, opll->reg[0x37] >> 4);
     }
   } else if (new_rhythm_mode) {
     opll->patch_number[7] = 17;
     opll->slot[SLOT_HH].type = 1;
     opll->slot[SLOT_HH].pg_keep = 1;
-    opll->slot[SLOT_HH].eg_state = FINISH;
-    opll->slot[SLOT_SD].eg_state = FINISH;
+    opll->slot[SLOT_HH].eg_state = RELEASE;
+    opll->slot[SLOT_HH].eg_out = EG_MUTE;
+    opll->slot[SLOT_SD].eg_state = RELEASE;
+    opll->slot[SLOT_SD].eg_out = EG_MUTE;
     set_slot_patch(&opll->slot[SLOT_HH], &opll->patch[17 * 2 + 0]);
     set_slot_patch(&opll->slot[SLOT_SD], &opll->patch[17 * 2 + 1]);
   }
@@ -467,16 +516,20 @@ static inline void update_rhythm_mode(OPLL *opll) {
     if (!((BIT(slot_key_status, SLOT_CYM) && BIT(slot_key_status, SLOT_TOM)) | new_rhythm_mode)) {
       opll->slot[SLOT_TOM].type = 0;
       opll->slot[SLOT_CYM].pg_keep = 0;
-      opll->slot[SLOT_TOM].eg_state = FINISH;
-      opll->slot[SLOT_CYM].eg_state = FINISH;
+      opll->slot[SLOT_TOM].eg_state = RELEASE;
+      opll->slot[SLOT_TOM].eg_out = EG_MUTE;
+      opll->slot[SLOT_CYM].eg_state = RELEASE;
+      opll->slot[SLOT_CYM].eg_out = EG_MUTE;
       set_patch(opll, 8, opll->reg[0x38] >> 4);
     }
   } else if (new_rhythm_mode) {
     opll->patch_number[8] = 18;
     opll->slot[SLOT_TOM].type = 1;
     opll->slot[SLOT_CYM].pg_keep = 1;
-    opll->slot[SLOT_TOM].eg_state = FINISH;
-    opll->slot[SLOT_CYM].eg_state = FINISH;
+    opll->slot[SLOT_TOM].eg_state = RELEASE;
+    opll->slot[SLOT_TOM].eg_out = EG_MUTE;
+    opll->slot[SLOT_CYM].eg_state = RELEASE;
+    opll->slot[SLOT_CYM].eg_out = EG_MUTE;
     set_slot_patch(&opll->slot[SLOT_TOM], &opll->patch[18 * 2 + 0]);
     set_slot_patch(&opll->slot[SLOT_CYM], &opll->patch[18 * 2 + 1]);
   }
@@ -544,8 +597,6 @@ static inline uint8_t lookup_decay_step(OPLL_SLOT *slot, uint32_t counter) {
   int index;
 
   switch (slot->eg_rate >> 2) {
-  case 0:
-    return 0;
   case 13:
     index = ((counter & 0xc) >> 1) | (counter & 1);
     return eg_step_tables[slot->eg_rate & 3][index];
@@ -570,7 +621,7 @@ static inline void calc_envelope(OPLL_SLOT *slot, OPLL_SLOT *slave_slot, uint16_
     if ((eg_counter & mask & ~3) == 0) {
       s = lookup_attack_step(slot, eg_counter);
       if (0 < s) {
-        slot->eg_out = slot->eg_out - (slot->eg_out >> s) - 1;
+        slot->eg_out = max(0, ((int)slot->eg_out - (slot->eg_out >> s) - 1));
       }
     }
     if (((slot->eg_rate >> 2) == 15) || slot->eg_out == 0) {
@@ -585,42 +636,38 @@ static inline void calc_envelope(OPLL_SLOT *slot, OPLL_SLOT *slave_slot, uint16_
       slot->eg_out += lookup_decay_step(slot, eg_counter);
     }
     if (slot->eg_out >= SL2EG(slot->patch->SL)) {
-      slot->eg_state = slot->patch->EG ? SUSHOLD : SUSTINE;
+      slot->eg_state = SUSTAIN;
       slot->eg_out = SL2EG(slot->patch->SL);
       request_update(slot, UPDATE_EG);
     }
     break;
 
-  case SUSHOLD:
-    if (slot->patch->EG == 0) {
-      slot->eg_state = SUSTINE;
-      request_update(slot, UPDATE_EG);
-    }
-    break;
-
-  case SUSTINE:
+  case SUSTAIN:
   case RELEASE:
+    if (slot->eg_rate == 0 || slot->eg_out >= EG_MUTE) {
+      break; // avoid useless calculation for performance
+    }
     if ((eg_counter & mask) == 0) {
       slot->eg_out += lookup_decay_step(slot, eg_counter);
     }
-    if (slot->eg_out >= EG_MUTE) {
-      slot->eg_state = FINISH;
+    if (slot->eg_out > EG_MUTE) {
       slot->eg_out = EG_MUTE;
-      request_update(slot, UPDATE_EG);
     }
     break;
 
   case DAMP:
-    if ((eg_counter & mask) == 0) {
-      slot->eg_out += lookup_decay_step(slot, eg_counter);
+    if (slot->eg_out < EG_MUTE) {
+      if ((eg_counter & mask) == 0) {
+        slot->eg_out += lookup_decay_step(slot, eg_counter);
+      }
     }
+
     if (slot->eg_out >= EG_MUTE) {
+      slot->eg_out = EG_MUTE;
       if (slot->type == 1) {
         slot->eg_state = ATTACK;
-        slot->eg_out = EG_MUTE;
         slot->pg_phase = slot->pg_keep ? slot->pg_phase : 0;
         request_update(slot, UPDATE_EG);
-
         if (slave_slot) {
           slave_slot->eg_state = ATTACK;
           slave_slot->eg_out = EG_MUTE;
@@ -629,10 +676,6 @@ static inline void calc_envelope(OPLL_SLOT *slot, OPLL_SLOT *slave_slot, uint16_
         }
       }
     }
-    break;
-
-  case FINISH:
-    slot->eg_out = EG_MUTE;
     break;
 
   default:
@@ -673,8 +716,9 @@ static inline int16_t to_linear(uint16_t h, OPLL_SLOT *slot, int16_t am) {
 static inline int16_t calc_slot_car(OPLL *opll, int ch, int16_t fm) {
   OPLL_SLOT *slot = CAR(opll, ch);
 
-  if (slot->eg_state == FINISH)
+  if (slot->eg_out >= EG_MUTE) {
     return 0;
+  }
 
   uint8_t am = slot->patch->AM ? opll->lfo_am : 0;
 
@@ -684,8 +728,9 @@ static inline int16_t calc_slot_car(OPLL *opll, int ch, int16_t fm) {
 static inline int16_t calc_slot_mod(OPLL *opll, int ch) {
   OPLL_SLOT *slot = MOD(opll, ch);
 
-  if (slot->eg_state == FINISH)
+  if (slot->eg_out >= EG_MUTE) {
     return 0;
+  }
 
   int16_t fm = slot->patch->FB > 0 ? wave2_4pi(slot->feedback) >> (7 - slot->patch->FB) : 0;
   uint8_t am = slot->patch->AM ? opll->lfo_am : 0;
@@ -700,8 +745,9 @@ static inline int16_t calc_slot_mod(OPLL *opll, int ch) {
 static inline int16_t calc_slot_tom(OPLL *opll) {
   OPLL_SLOT *slot = MOD(opll, 8);
 
-  if (slot->eg_state == FINISH)
+  if (slot->eg_out >= EG_MUTE) {
     return 0;
+  }
 
   return to_linear(slot->wave_table[slot->pg_out], slot, 0);
 }
@@ -712,8 +758,9 @@ static inline int16_t calc_slot_tom(OPLL *opll) {
 static inline int16_t calc_slot_snare(OPLL *opll) {
   OPLL_SLOT *slot = CAR(opll, 7);
 
-  if (slot->eg_state == FINISH)
+  if (slot->eg_out >= EG_MUTE) {
     return 0;
+  }
 
   uint32_t phase;
 
@@ -728,8 +775,9 @@ static inline int16_t calc_slot_snare(OPLL *opll) {
 static inline int16_t calc_slot_cym(OPLL *opll) {
   OPLL_SLOT *slot = CAR(opll, 8);
 
-  if (slot->eg_state == FINISH)
+  if (slot->eg_out >= EG_MUTE) {
     return 0;
+  }
 
   uint32_t phase = opll->short_noise ? _PD(0x300) : _PD(0x100);
 
@@ -739,8 +787,9 @@ static inline int16_t calc_slot_cym(OPLL *opll) {
 static inline int16_t calc_slot_hat(OPLL *opll) {
   OPLL_SLOT *slot = MOD(opll, 7);
 
-  if (slot->eg_state == FINISH)
+  if (slot->eg_out >= EG_MUTE) {
     return 0;
+  }
 
   uint32_t phase;
   if (opll->short_noise)
@@ -1062,7 +1111,7 @@ void OPLL_writeReg(OPLL *opll, uint32_t reg, uint32_t data) {
     ch = reg - 0x20;
     set_fnumber(opll, ch, ((data & 1) << 8) + opll->reg[0x10 + ch]);
     set_block(opll, ch, (data >> 1) & 7);
-    set_sustine(opll, ch, (data >> 5) & 1);
+    set_sus_flag(opll, ch, (data >> 5) & 1);
     update_key_status(opll);
     /* update rhythm mode here because key-off of rhythm instrument is deferred until key-on bit is down. */
     update_rhythm_mode(opll);
@@ -1122,7 +1171,9 @@ void OPLL_dumpToPatch(const uint8_t *dump, OPLL_PATCH *patch) {
   patch[0].KL = (dump[2] >> 6) & 3;
   patch[1].KL = (dump[3] >> 6) & 3;
   patch[0].TL = (dump[2]) & 63;
+  patch[1].TL = 0;
   patch[0].FB = (dump[3]) & 7;
+  patch[1].FB = 0;
   patch[0].WF = (dump[3] >> 3) & 1;
   patch[1].WF = (dump[3] >> 4) & 1;
   patch[0].AR = (dump[4] >> 4) & 15;

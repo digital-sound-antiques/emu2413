@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-typedef enum __OPLL_EG_STATE { ATTACK, DECAY, SUSHOLD, SUSTINE, RELEASE, FINISH, DAMP } OPLL_EG_STATE;
+typedef enum __OPLL_EG_STATE { ATTACK, DECAY, SUSTAIN, RELEASE, DAMP } OPLL_EG_STATE;
 
 enum OPLL_TONE_ENUM { OPLL_2413_TONE = 0, OPLL_VRC7_TONE = 1, OPLL_281B_TONE = 2 };
 
@@ -37,14 +37,16 @@ typedef struct __OPLL_SLOT {
   uint8_t blk;          /* block (3 bits) */
 
   /* envelope generator (eg) */
-  uint8_t eg_state;         /* current state */
-  int32_t volume;           /* current volume */
-  uint8_t sustine;          /* sustine 1:on 0:off */
-  uint16_t tll;             /* total level + key scale level*/
-  uint8_t rks;              /* key scale offset (rks) for eg speed */
-  uint8_t eg_rate;          /* eg speed rate: min(63, (ar/dr/rr << 2) + rks) */
-  uint32_t eg_shift;        /* shift for eg global counter, controls envelope speed */
-  uint32_t eg_out;          /* eg output */
+  uint8_t eg_state;  /* current state */
+  int32_t volume;    /* current volume */
+  uint8_t sus_flag;  /* key-sus option 1:on 0:off */
+  uint16_t tll;      /* total level + key scale level*/
+  uint8_t rks;       /* key scale offset (rks) for eg speed */
+  uint8_t eg_rate;   /* eg speed rate: min(63, (ar/dr/rr << 2) + rks) */
+  uint32_t eg_shift; /* shift for eg global counter, controls envelope speed */
+  uint32_t eg_out;   /* eg output */
+
+  uint8_t last_eg_state;
 
   uint32_t update_requests; /* flags to debounce update */
 } OPLL_SLOT;
