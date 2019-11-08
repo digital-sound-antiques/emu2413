@@ -278,7 +278,8 @@ static void commit_slot_update(OPLL_SLOT *slot) {
   }
 
   if (slot->update_requests & (UPDATE_RKS | UPDATE_EG)) {
-    slot->eg_rate = min(63, (get_parameter_rate(slot) << 2) + slot->rks);
+    const int p_rate = get_parameter_rate(slot);
+    slot->eg_rate = (0 < p_rate) ? min(63, (p_rate << 2) + slot->rks) : 0;
     const int RM = slot->eg_rate >> 2;
     if (slot->eg_state == ATTACK) {
       slot->eg_shift = (0 < RM && RM < 12) ? (13 - RM) : 0;
@@ -521,9 +522,6 @@ static inline uint8_t lookup_attack_step(OPLL_SLOT *slot, uint32_t counter) {
   int index;
 
   switch (slot->eg_rate >> 2) {
-  default:
-    index = counter >> slot->eg_shift;
-    return eg_step_tables[slot->eg_rate & 3][index & 7] ? 4 : 0;
   case 12:
     index = (counter & 0xc) >> 1;
     return 4 - eg_step_tables[slot->eg_rate & 3][index];
@@ -536,6 +534,9 @@ static inline uint8_t lookup_attack_step(OPLL_SLOT *slot, uint32_t counter) {
   case 0:
   case 15:
     return 0;
+  default:
+    index = counter >> slot->eg_shift;
+    return eg_step_tables[slot->eg_rate & 3][index & 7] ? 4 : 0;
   }
 }
 
@@ -543,9 +544,8 @@ static inline uint8_t lookup_decay_step(OPLL_SLOT *slot, uint32_t counter) {
   int index;
 
   switch (slot->eg_rate >> 2) {
-  default:
-    index = counter >> slot->eg_shift;
-    return eg_step_tables[slot->eg_rate & 3][index & 7];
+  case 0:
+    return 0;
   case 13:
     index = ((counter & 0xc) >> 1) | (counter & 1);
     return eg_step_tables[slot->eg_rate & 3][index];
@@ -554,6 +554,9 @@ static inline uint8_t lookup_decay_step(OPLL_SLOT *slot, uint32_t counter) {
     return eg_step_tables[slot->eg_rate & 3][index] + 1;
   case 15:
     return 2;
+  default:
+    index = counter >> slot->eg_shift;
+    return eg_step_tables[slot->eg_rate & 3][index & 7];
   }
 }
 
