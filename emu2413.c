@@ -4,6 +4,7 @@
  * Copyright (C) 2019 Mitsutaka Okazaki
  */
 #include "emu2413.h"
+#define _USE_MATH_DEFINES // for MSVC
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -134,7 +135,7 @@ static OPLL_PATCH default_patch[OPLL_TONE_NUM][(16 + 3) * 2];
 static void makeExpTable(void) {
   int x;
   for (x = 0; x < 256; x++) {
-    exp_table[x] = round((exp2((double)x / 256.0) - 1) * 1024);
+    exp_table[x] = (uint16_t)round((exp2((double)x / 256.0) - 1) * 1024);
   }
 }
 
@@ -875,7 +876,8 @@ inline static void mix_output_stereo(OPLL *opll, int32_t out[2]) {
 }
 
 inline int16_t interporate_output(OPLL *opll, int16_t next, int16_t prev) {
-  return ((double)next * (opll->opll_step - opll->opll_time) + (double)prev * opll->opll_time) / opll->opll_step;
+  return (int16_t)(((double)next * (opll->opll_step - opll->opll_time) + (double)prev * opll->opll_time) /
+                   opll->opll_step);
 }
 
 /***********************************************************
