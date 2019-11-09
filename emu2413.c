@@ -511,6 +511,7 @@ static inline void update_rhythm_mode(OPLL *opll) {
     opll->slot[SLOT_SD].eg_out = EG_MUTE;
     set_slot_patch(&opll->slot[SLOT_HH], &opll->patch[17 * 2 + 0]);
     set_slot_patch(&opll->slot[SLOT_SD], &opll->patch[17 * 2 + 1]);
+    set_slot_volume(&opll->slot[SLOT_HH], ((opll->reg[0x37] >> 4) & 15) << 2);
   }
 
   if (opll->patch_number[8] & 0x10) {
@@ -533,6 +534,7 @@ static inline void update_rhythm_mode(OPLL *opll) {
     opll->slot[SLOT_CYM].eg_out = EG_MUTE;
     set_slot_patch(&opll->slot[SLOT_TOM], &opll->patch[18 * 2 + 0]);
     set_slot_patch(&opll->slot[SLOT_CYM], &opll->patch[18 * 2 + 1]);
+    set_slot_volume(&opll->slot[SLOT_TOM], ((opll->reg[0x38] >> 4) & 15) << 2);
   }
 
   opll->rhythm_mode = new_rhythm_mode;
