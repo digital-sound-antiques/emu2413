@@ -1,5 +1,5 @@
 /**
- * emu2413 v1.0.0-alpha4
+ * emu2413 v1.0.0-alpha5
  * https://github.com/digital-sound-antiques/emu2413
  * Copyright (C) 2019 Mitsutaka Okazaki
  */
@@ -255,7 +255,8 @@ static char *_debug_eg_state_name(OPLL_SLOT *slot) {
 
 static inline void _debug_print_slot_info(OPLL_SLOT *slot) {
   char *name = _debug_eg_state_name(slot);
-  printf("[slot#%d state:%s fnum:%03x rate:%d]\n", slot->number, name, slot->blk_fnum, slot->eg_rate);
+  printf("[slot#%d state:%s fnum:%03x rate:%d-%d]\n", slot->number, name, slot->blk_fnum, slot->eg_rate_h,
+         slot->eg_rate_l);
   _debug_print_patch(slot);
   fflush(stdout);
 }
@@ -321,12 +322,20 @@ static void commit_slot_update(OPLL_SLOT *slot) {
 
   if (slot->update_requests & (UPDATE_RKS | UPDATE_EG)) {
     int p_rate = get_parameter_rate(slot);
-    slot->eg_rate = (0 < p_rate) ? min(63, (p_rate << 2) + slot->rks) : 0;
-    const int RM = slot->eg_rate >> 2;
+
+    if (p_rate == 0) {
+      slot->eg_shift = 0;
+      slot->eg_rate_h = 0;
+      slot->eg_rate_l = 0;
+      return;
+    }
+
+    slot->eg_rate_h = min(15, p_rate + (slot->rks >> 2));
+    slot->eg_rate_l = slot->rks & 3;
     if (slot->eg_state == ATTACK) {
-      slot->eg_shift = (0 < RM && RM < 12) ? (13 - RM) : 0;
+      slot->eg_shift = (0 < slot->eg_rate_h && slot->eg_rate_h < 12) ? (13 - slot->eg_rate_h) : 0;
     } else {
-      slot->eg_shift = (RM < 13) ? (13 - RM) : 0;
+      slot->eg_shift = (slot->eg_rate_h < 13) ? (13 - slot->eg_rate_h) : 0;
     }
   }
 
@@ -577,40 +586,42 @@ static inline void calc_phase(OPLL_SLOT *slot, int32_t pm_phase) {
 static inline uint8_t lookup_attack_step(OPLL_SLOT *slot, uint32_t counter) {
   int index;
 
-  switch (slot->eg_rate >> 2) {
+  switch (slot->eg_rate_h) {
   case 12:
     index = (counter & 0xc) >> 1;
-    return 4 - eg_step_tables[slot->eg_rate & 3][index];
+    return 4 - eg_step_tables[slot->eg_rate_l][index];
   case 13:
     index = (counter & 0xc) >> 1;
-    return 3 - eg_step_tables[slot->eg_rate & 3][index];
+    return 3 - eg_step_tables[slot->eg_rate_l][index];
   case 14:
     index = (counter & 0xc) >> 1;
-    return 2 - eg_step_tables[slot->eg_rate & 3][index];
+    return 2 - eg_step_tables[slot->eg_rate_l][index];
   case 0:
   case 15:
     return 0;
   default:
     index = counter >> slot->eg_shift;
-    return eg_step_tables[slot->eg_rate & 3][index & 7] ? 4 : 0;
+    return eg_step_tables[slot->eg_rate_l][index & 7] ? 4 : 0;
   }
 }
 
 static inline uint8_t lookup_decay_step(OPLL_SLOT *slot, uint32_t counter) {
   int index;
 
-  switch (slot->eg_rate >> 2) {
+  switch (slot->eg_rate_h) {
+  case 0:
+    return 0;
   case 13:
     index = ((counter & 0xc) >> 1) | (counter & 1);
-    return eg_step_tables[slot->eg_rate & 3][index];
+    return eg_step_tables[slot->eg_rate_l][index];
   case 14:
     index = ((counter & 0xc) >> 1);
-    return eg_step_tables[slot->eg_rate & 3][index] + 1;
+    return eg_step_tables[slot->eg_rate_l][index] + 1;
   case 15:
     return 2;
   default:
     index = counter >> slot->eg_shift;
-    return eg_step_tables[slot->eg_rate & 3][index & 7];
+    return eg_step_tables[slot->eg_rate_l][index & 7];
   }
 }
 
@@ -621,13 +632,13 @@ static inline void calc_envelope(OPLL_SLOT *slot, OPLL_SLOT *slave_slot, uint16_
 
   switch (slot->eg_state) {
   case ATTACK:
-    if ((eg_counter & mask & ~3) == 0) {
+    if (slot->eg_rate_h > 0 && (eg_counter & mask & ~3) == 0) {
       s = lookup_attack_step(slot, eg_counter);
       if (0 < s) {
         slot->eg_out = max(0, ((int)slot->eg_out - (slot->eg_out >> s) - 1));
       }
     }
-    if (((slot->eg_rate >> 2) == 15) || slot->eg_out == 0) {
+    if (slot->eg_rate_h == 15 || slot->eg_out == 0) {
       slot->eg_state = DECAY;
       slot->eg_out = 0;
       request_update(slot, UPDATE_EG);
@@ -635,7 +646,7 @@ static inline void calc_envelope(OPLL_SLOT *slot, OPLL_SLOT *slave_slot, uint16_
     break;
 
   case DECAY:
-    if ((eg_counter & mask) == 0) {
+    if (slot->eg_rate_h > 0 && (eg_counter & mask) == 0) {
       slot->eg_out += lookup_decay_step(slot, eg_counter);
     }
     if (slot->eg_out >= SL2EG(slot->patch->SL)) {
@@ -647,10 +658,7 @@ static inline void calc_envelope(OPLL_SLOT *slot, OPLL_SLOT *slave_slot, uint16_
 
   case SUSTAIN:
   case RELEASE:
-    if (slot->eg_rate == 0 || slot->eg_out >= EG_MUTE) {
-      break; // avoid useless calculation for performance
-    }
-    if ((eg_counter & mask) == 0) {
+    if (slot->eg_rate_h > 0 && (eg_counter & mask) == 0) {
       slot->eg_out += lookup_decay_step(slot, eg_counter);
     }
     if (slot->eg_out > EG_MUTE) {
@@ -659,10 +667,8 @@ static inline void calc_envelope(OPLL_SLOT *slot, OPLL_SLOT *slave_slot, uint16_
     break;
 
   case DAMP:
-    if (slot->eg_out < EG_MUTE) {
-      if ((eg_counter & mask) == 0) {
-        slot->eg_out += lookup_decay_step(slot, eg_counter);
-      }
+    if (slot->eg_rate_h > 0 && (eg_counter & mask) == 0) {
+      slot->eg_out += lookup_decay_step(slot, eg_counter);
     }
 
     if (slot->eg_out >= EG_MUTE) {
@@ -712,16 +718,15 @@ static inline int16_t lookup_exp_table(uint16_t i) {
 }
 
 static inline int16_t to_linear(uint16_t h, OPLL_SLOT *slot, int16_t am) {
+  if (slot->eg_out >= (EG_MUTE - 3))
+    return 0;
+  
   uint16_t att = min(127, (slot->eg_out + slot->tll + am)) << 4;
   return lookup_exp_table(h + att);
 }
 
 static inline int16_t calc_slot_car(OPLL *opll, int ch, int16_t fm) {
   OPLL_SLOT *slot = CAR(opll, ch);
-
-  if (slot->eg_out >= EG_MUTE) {
-    return 0;
-  }
 
   uint8_t am = slot->patch->AM ? opll->lfo_am : 0;
 
@@ -730,10 +735,6 @@ static inline int16_t calc_slot_car(OPLL *opll, int ch, int16_t fm) {
 
 static inline int16_t calc_slot_mod(OPLL *opll, int ch) {
   OPLL_SLOT *slot = MOD(opll, ch);
-
-  if (slot->eg_out >= EG_MUTE) {
-    return 0;
-  }
 
   int16_t fm = slot->patch->FB > 0 ? wave2_4pi(slot->feedback) >> (7 - slot->patch->FB) : 0;
   uint8_t am = slot->patch->AM ? opll->lfo_am : 0;
@@ -748,10 +749,6 @@ static inline int16_t calc_slot_mod(OPLL *opll, int ch) {
 static inline int16_t calc_slot_tom(OPLL *opll) {
   OPLL_SLOT *slot = MOD(opll, 8);
 
-  if (slot->eg_out >= EG_MUTE) {
-    return 0;
-  }
-
   return to_linear(slot->wave_table[slot->pg_out], slot, 0);
 }
 
@@ -760,10 +757,6 @@ static inline int16_t calc_slot_tom(OPLL *opll) {
 
 static inline int16_t calc_slot_snare(OPLL *opll) {
   OPLL_SLOT *slot = CAR(opll, 7);
-
-  if (slot->eg_out >= EG_MUTE) {
-    return 0;
-  }
 
   uint32_t phase;
 
@@ -778,10 +771,6 @@ static inline int16_t calc_slot_snare(OPLL *opll) {
 static inline int16_t calc_slot_cym(OPLL *opll) {
   OPLL_SLOT *slot = CAR(opll, 8);
 
-  if (slot->eg_out >= EG_MUTE) {
-    return 0;
-  }
-
   uint32_t phase = opll->short_noise ? _PD(0x300) : _PD(0x100);
 
   return to_linear(slot->wave_table[phase], slot, 0);
@@ -790,11 +779,8 @@ static inline int16_t calc_slot_cym(OPLL *opll) {
 static inline int16_t calc_slot_hat(OPLL *opll) {
   OPLL_SLOT *slot = MOD(opll, 7);
 
-  if (slot->eg_out >= EG_MUTE) {
-    return 0;
-  }
-
   uint32_t phase;
+
   if (opll->short_noise)
     phase = opll->noise ? _PD(0x2d0) : _PD(0x234);
   else
