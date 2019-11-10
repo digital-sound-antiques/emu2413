@@ -720,7 +720,7 @@ static inline int16_t lookup_exp_table(uint16_t i) {
 static inline int16_t to_linear(uint16_t h, OPLL_SLOT *slot, int16_t am) {
   if (slot->eg_out >= (EG_MUTE - 3))
     return 0;
-  
+
   uint16_t att = min(127, (slot->eg_out + slot->tll + am)) << 4;
   return lookup_exp_table(h + att);
 }
@@ -789,7 +789,7 @@ static inline int16_t calc_slot_hat(OPLL *opll) {
   return to_linear(slot->wave_table[phase], slot, 0);
 }
 
-#define _MO(x) (x >> 1)
+#define _MO(x) ((x) >> 1)
 #define _RO(x) (x)
 
 static void update_output(OPLL *opll) {
@@ -800,50 +800,54 @@ static void update_output(OPLL *opll) {
   update_slots(opll);
 
   /* CH1-6 */
-  for (int i = 0; i < 6; i++)
-    if (!(opll->mask & OPLL_MASK_CH(i)))
+  for (int i = 0; i < 6; i++) {
+    if (!(opll->mask & OPLL_MASK_CH(i))) {
       opll->ch_out[i] += _MO(calc_slot_car(opll, i, calc_slot_mod(opll, i)));
+    }
+  }
 
   /* CH7 */
   if (opll->patch_number[6] <= 15) {
-    if (!(opll->mask & OPLL_MASK_CH(6)))
+    if (!(opll->mask & OPLL_MASK_CH(6))) {
       opll->ch_out[6] += _MO(calc_slot_car(opll, 6, calc_slot_mod(opll, 6)));
+    }
   } else {
-    if (!(opll->mask & OPLL_MASK_BD))
+    if (!(opll->mask & OPLL_MASK_BD)) {
       opll->ch_out[9] += _RO(calc_slot_car(opll, 6, calc_slot_mod(opll, 6)));
+    }
   }
 
   /* CH8 */
   if (opll->patch_number[7] <= 15) {
-    if (!(opll->mask & OPLL_MASK_CH(7)))
+    if (!(opll->mask & OPLL_MASK_CH(7))) {
       opll->ch_out[7] += _MO(calc_slot_car(opll, 7, calc_slot_mod(opll, 7)));
+    }
   } else {
-    if (!(opll->mask & OPLL_MASK_HH))
+    if (!(opll->mask & OPLL_MASK_HH)) {
       opll->ch_out[10] += _RO(calc_slot_hat(opll));
-    if (!(opll->mask & OPLL_MASK_SD))
+    }
+    if (!(opll->mask & OPLL_MASK_SD)) {
       opll->ch_out[11] += _RO(calc_slot_snare(opll));
+    }
   }
 
   /* CH9 */
   if (opll->patch_number[8] <= 15) {
-    if (!(opll->mask & OPLL_MASK_CH(8)))
+    if (!(opll->mask & OPLL_MASK_CH(8))) {
       opll->ch_out[8] += _MO(calc_slot_car(opll, 8, calc_slot_mod(opll, 8)));
+    }
   } else {
-    if (!(opll->mask & OPLL_MASK_TOM))
+    if (!(opll->mask & OPLL_MASK_TOM)) {
       opll->ch_out[12] += _RO(calc_slot_tom(opll));
-    if (!(opll->mask & OPLL_MASK_CYM))
+    }
+    if (!(opll->mask & OPLL_MASK_CYM)) {
       opll->ch_out[13] += _RO(calc_slot_cym(opll));
+    }
   }
-}
 
-inline static void flush_output(OPLL *opll) {
-  for (int i = 0; i < 15; i++)
-    opll->ch_out[i] = 0;
-}
-
-inline static void divide_output(OPLL *opll, int div) {
-  for (int i = 0; i < 15; i++)
-    opll->ch_out[i] /= div;
+  for (int i = 0; i < 15; i++) {
+    opll->ch_out[i] >>= 1;
+  }
 }
 
 inline static int32_t mix_output(OPLL *opll) {
@@ -1216,13 +1220,11 @@ int16_t OPLL_calc(OPLL *opll) {
   prev = mix_output(opll);
 
   if (opll->real_step > opll->opll_time) {
-    flush_output(opll);
     while (opll->real_step > opll->opll_time) {
       opll->opll_time += opll->opll_step;
       update_output(opll);
       count++;
     }
-    divide_output(opll, count);
   }
 
   opll->opll_time -= opll->real_step;
@@ -1238,13 +1240,11 @@ void OPLL_calcStereo(OPLL *opll, int32_t out[2]) {
   mix_output_stereo(opll, prev);
 
   if (opll->real_step > opll->opll_time) {
-    flush_output(opll);
     while (opll->real_step > opll->opll_time) {
       opll->opll_time += opll->opll_step;
       update_output(opll);
       count++;
     }
-    divide_output(opll, count);
   }
   opll->opll_time -= opll->real_step;
 
