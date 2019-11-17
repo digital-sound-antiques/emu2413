@@ -189,8 +189,10 @@ static inline int16_t lookup_sinc_table(int16_t *table, double x) {
 }
 
 void OPLL_RateConv_reset(OPLL_RateConv *conv) {
-  memset(conv->buf[0], 0, sizeof(conv->buf[0][0]) * LW);
-  memset(conv->buf[1], 0, sizeof(conv->buf[1][0]) * LW);
+  conv->timer = 0;
+  for(int i = 0 ; i < conv->ch ; i++) {
+    memset(conv->buf[i], 0, sizeof(conv->buf[i][0]) * LW);
+  }
 }
 
 /* put original data to this converter at f_inp. */
@@ -1030,8 +1032,8 @@ static void reset_rate_conversion_params(OPLL *opll) {
   const double f_inp = opll->clk / 72;
 
   opll->out_time = 0;
-  opll->out_step = (uint32_t)f_inp;
-  opll->inp_step = (uint32_t)f_out;
+  opll->out_step = ((uint32_t)f_inp) << 8;
+  opll->inp_step = ((uint32_t)f_out) << 8;
 
   if (opll->conv) {
     OPLL_RateConv_delete(opll->conv);
@@ -1040,6 +1042,10 @@ static void reset_rate_conversion_params(OPLL *opll) {
 
   if (floor(f_inp) != f_out && round(f_inp) != f_out) {
     opll->conv = OPLL_RateConv_new(f_inp, f_out, 2);
+  }
+
+  if (opll->conv) {
+    OPLL_RateConv_reset(opll->conv);
   }
 }
 
@@ -1078,10 +1084,6 @@ void OPLL_reset(OPLL *opll) {
 
   for (int i = 0; i < 15; i++) {
     opll->ch_out[i] = 0;
-  }
-
-  if (opll->conv) {
-    OPLL_RateConv_reset(opll->conv);
   }
 }
 
