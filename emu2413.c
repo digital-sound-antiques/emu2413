@@ -171,10 +171,10 @@ OPLL_RateConv *OPLL_RateConv_new(double f_inp, double f_out, int ch) {
     const double x = (double)i / SINC_RESO;
     if (f_out < f_inp) {
       /* for downsampling */
-      conv->sinc_table[i] = (1 << SINC_AMP_BITS) * windowed_sinc(x / conv->f_ratio) / conv->f_ratio;
+      conv->sinc_table[i] = (int16_t)((1 << SINC_AMP_BITS) * windowed_sinc(x / conv->f_ratio) / conv->f_ratio);
     } else {
       /* for upsampling */
-      conv->sinc_table[i] = (1 << SINC_AMP_BITS) * windowed_sinc(x);
+      conv->sinc_table[i] = (int16_t)((1 << SINC_AMP_BITS) * windowed_sinc(x));
     }
   }
 
@@ -182,7 +182,7 @@ OPLL_RateConv *OPLL_RateConv_new(double f_inp, double f_out, int ch) {
 }
 
 static inline int16_t lookup_sinc_table(int16_t *table, double x) {
-  int16_t index = x * SINC_RESO;
+  int16_t index = (int16_t)(x * SINC_RESO);
   if (index < 0)
     index = -index;
   return table[min(SINC_RESO * LW / 2 - 1, index)];
@@ -1030,8 +1030,8 @@ static void reset_rate_conversion_params(OPLL *opll) {
   const double f_inp = opll->clk / 72;
 
   opll->out_time = 0;
-  opll->out_step = f_inp;
-  opll->inp_step = f_out;
+  opll->out_step = (uint32_t)f_inp;
+  opll->inp_step = (uint32_t)f_out;
 
   if (opll->conv) {
     OPLL_RateConv_delete(opll->conv);
