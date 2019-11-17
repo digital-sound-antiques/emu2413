@@ -127,7 +127,7 @@ typedef struct __OPLL {
    */
   int16_t ch_out[15];
 
-  int16_t __out[2];
+  int16_t mix_out[2];
   OPLL_RateConv *conv;
 } OPLL;
 
