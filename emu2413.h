@@ -19,7 +19,13 @@ typedef struct __OPLL_PATCH {
 /* slot */
 typedef struct __OPLL_SLOT {
   uint8_t number;
-  int32_t type; /* 0:modulator 1:carrier */
+
+  /* type flags:
+   * 000000SM 
+   *       |+-- M: 0:modulator 1:carrier
+   *       +--- S: 0:normal 1:single mode (used as sd, tom, hh,top-cym) 
+   */
+  uint8_t type;
 
   OPLL_PATCH *patch; /* voice parameter */
 
@@ -61,6 +67,21 @@ typedef struct __OPLL_SLOT {
 #define OPLL_MASK_BD (1 << (13))
 #define OPLL_MASK_RHYTHM (OPLL_MASK_HH | OPLL_MASK_CYM | OPLL_MASK_TOM | OPLL_MASK_SD | OPLL_MASK_BD)
 
+/* rate conveter */
+typedef struct __OPLL_RateConv {
+  int ch;
+  double timer;
+  double f_ratio;
+  int16_t *sinc_table;
+  int16_t **buf;
+} OPLL_RateConv;
+
+OPLL_RateConv *OPLL_RateConv_new(double f_inp, double f_out, int ch);
+void OPLL_RateConv_reset(OPLL_RateConv *conv);
+void OPLL_RateConv_putData(OPLL_RateConv *conv, int ch, int16_t data);
+int16_t OPLL_RateConv_getData(OPLL_RateConv *conv, int ch);
+void OPLL_RateConv_delete(OPLL_RateConv *conv);
+
 /* opll */
 typedef struct __OPLL {
   uint32_t clk;
@@ -69,11 +90,10 @@ typedef struct __OPLL {
   uint8_t chip_mode;
 
   uint32_t adr;
-  int32_t out;
 
-  uint32_t real_step;
-  uint32_t opll_time;
-  uint32_t opll_step;
+  uint32_t inp_step;
+  uint32_t out_step;
+  uint32_t out_time;
 
   uint8_t reg[0x40];
   uint32_t slot_key_status;
@@ -105,8 +125,10 @@ typedef struct __OPLL {
    * 9:BD 10:HH 11:SD, 12:TOM, 13:CYM
    * 14:reserved for dac
    */
-  int32_t ch_out[15];
+  int16_t ch_out[15];
 
+  int16_t __out[2];
+  OPLL_RateConv *conv;
 } OPLL;
 
 OPLL *OPLL_new(uint32_t clk, uint32_t rate);

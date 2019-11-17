@@ -1,4 +1,7 @@
-# v1.0.0-alpha
+# v1.0.0-alpha6
+- Implement new sample rate converter.
+
+# v1.0.0-alpha5
 
 Major Update: playback quality has been drastically improved.
 

@@ -1,5 +1,5 @@
 /**
- * emu2413 v1.0.0-alpha5
+ * emu2413 v1.0.0-alpha6
  * https://github.com/digital-sound-antiques/emu2413
  * Copyright (C) 2019 Mitsutaka Okazaki
  */
@@ -124,13 +124,118 @@ static int32_t rks_table[8 * 2][2];
 static OPLL_PATCH null_patch = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 static OPLL_PATCH default_patch[OPLL_TONE_NUM][(16 + 3) * 2];
 
+#define min(i, j) (((i) < (j)) ? (i) : (j))
+#define max(i, j) (((i) > (j)) ? (i) : (j))
+
+/***************************************************
+
+           Internal Sample Rate Converter
+
+****************************************************/
+/* Internal rate converter can be disabled. See OPLL_setRate() for detail. */
+
+/* LW is truncate length of sinc(x) calculation.
+ * Lower LW is faster, higher LW results better quality.
+ * LW must be a non-zero positive even number, no upper limit. 
+ * LW=16 or greater is recommended when upsampling.
+ * LW=8 is practically okay for downsampling.
+ */
+#define LW 16
+
+/* resolution of sinc(x) table. sinc(x) where 0.0<=x<1.0 corresponds to sinc_table[0...SINC_RESO-1] */
+#define SINC_RESO 256
+#define SINC_AMP_BITS 12
+
+/* fast conversion: 3-point average filter is used instead of sinc(x) table. rough and fast.*/
+#define USE_FAST_RATE_CONV 0
+
+// double hamming(double x) { return 0.54 - 0.46 * cos(2 * M_PI * x); }
+static double blackman(double x) { return 0.42 - 0.5 * cos(2 * M_PI * x) + 0.08 * cos(4 * M_PI * x); }
+static double sinc(double x) { return (x == 0.0 ? 1.0 : sin(M_PI * x) / (M_PI * x)); }
+static double windowed_sinc(double x) { return blackman(0.5 + 0.5 * x / (LW / 2)) * sinc(x); }
+
+/* f_inp: input frequency. f_out: output frequencey, ch: number of channels */
+OPLL_RateConv *OPLL_RateConv_new(double f_inp, double f_out, int ch) {
+  OPLL_RateConv *conv = malloc(sizeof(OPLL_RateConv));
+
+  conv->ch = ch;
+  conv->f_ratio = f_inp / f_out;
+  conv->buf = malloc(sizeof(void *) * ch);
+  for(int i = 0 ; i < ch ; i++) {
+    conv->buf[i] = malloc(sizeof(conv->buf[0][0]) * LW);
+  }
+
+  /* create sinc_table for positive 0 <= x < LW/2 */
+  conv->sinc_table = malloc(sizeof(conv->sinc_table[0]) * SINC_RESO * LW / 2);
+  for (int i = 0; i < SINC_RESO * LW / 2; i++) {
+    const double x = (double)i / SINC_RESO;
+    if (f_out < f_inp) {
+      /* for downsampling */
+      conv->sinc_table[i] = (1 << SINC_AMP_BITS) * windowed_sinc(x / conv->f_ratio) / conv->f_ratio;
+    } else {
+      /* for upsampling */
+      conv->sinc_table[i] = (1 << SINC_AMP_BITS) * windowed_sinc(x);
+    }
+  }
+
+  return conv;
+}
+
+static inline int16_t lookup_sinc_table(int16_t *table, double x) {
+  int16_t index = x * SINC_RESO;
+  if (index < 0)
+    index = -index;
+  return table[min(SINC_RESO * LW / 2 - 1, index)];
+}
+
+void OPLL_RateConv_reset(OPLL_RateConv *conv) {
+  memset(conv->buf[0], 0, sizeof(conv->buf[0][0]) * LW);
+  memset(conv->buf[1], 0, sizeof(conv->buf[1][0]) * LW);
+}
+
+/* put original data to this converter at f_inp. */
+void OPLL_RateConv_putData(OPLL_RateConv *conv, int ch, int16_t data) {
+  int16_t *buf = conv->buf[ch];
+  for (int i = 0; i < LW - 1; i++) {
+    buf[i] = buf[i + 1];
+  }
+  buf[LW - 1] = data;
+}
+
+/* get resampled data from this converter at f_out. */
+/* this function must be called f_out / f_inp times per one putData call. */
+int16_t OPLL_RateConv_getData(OPLL_RateConv *conv, int ch) {
+  int16_t *buf = conv->buf[ch];
+#if USE_FAST_RATE_CONV
+  return (buf[0] + buf[1] + buf[2]) / 3;
+#else
+  conv->timer += conv->f_ratio;
+  const double dn = conv->timer - floor(conv->timer);
+  conv->timer = dn;
+
+  int32_t sum = 0;
+  for (int k = 0; k < LW; k++) {
+    double x = ((double)k - (LW / 2 - 1)) - dn;
+    sum += buf[k] * lookup_sinc_table(conv->sinc_table, x);
+  }
+  return sum >> SINC_AMP_BITS;
+#endif
+}
+
+void OPLL_RateConv_delete(OPLL_RateConv *conv) {
+  for(int i=0;i<conv->ch;i++) {
+    free(conv->buf[i]);
+  }
+  free(conv->buf);
+  free(conv->sinc_table);
+  free(conv);
+}
+
 /***************************************************
 
                   Create tables
 
 ****************************************************/
-#define min(i, j) (((i) < (j)) ? (i) : (j))
-#define max(i, j) (((i) > (j)) ? (i) : (j))
 
 static void makeExpTable(void) {
   int x;
@@ -309,7 +414,7 @@ static void commit_slot_update(OPLL_SLOT *slot) {
   }
 
   if (slot->update_requests & UPDATE_TLL) {
-    if (slot->type == 0) {
+    if ((slot->type & 1) == 0) {
       slot->tll = tll_table[slot->blk_fnum >> 5][slot->patch->TL][slot->patch->KL];
     } else {
       slot->tll = tll_table[slot->blk_fnum >> 5][slot->volume][slot->patch->KL];
@@ -373,7 +478,7 @@ static inline void slotOn(OPLL *opll, int i) {
 
 static inline void slotOff(OPLL *opll, int i) {
   OPLL_SLOT *slot = &opll->slot[i];
-  if (slot->type == 1) {
+  if (slot->type & 1) {
     slot->eg_state = RELEASE;
     request_update(slot, UPDATE_EG);
   }
@@ -407,6 +512,8 @@ static inline void update_key_status(OPLL *opll) {
 
   uint32_t updated_status = opll->slot_key_status ^ new_slot_key_status;
 
+  // updated_status &= ~0x0fff;
+
   if (updated_status) {
     for (int i = 0; i < 18; i++)
       if (BIT(updated_status, i)) {
@@ -437,7 +544,7 @@ static inline void set_slot_patch(OPLL_SLOT *slot, OPLL_PATCH *patch) {
 static inline void set_sus_flag(OPLL *opll, int ch, int flag) {
   CAR(opll, ch)->sus_flag = flag;
   request_update(CAR(opll, ch), UPDATE_EG);
-  if (MOD(opll, ch)->type) {
+  if (MOD(opll, ch)->type & 1) {
     MOD(opll, ch)->sus_flag = flag;
     request_update(MOD(opll, ch), UPDATE_EG);
   }
@@ -506,16 +613,18 @@ static inline void update_rhythm_mode(OPLL *opll) {
       opll->slot[SLOT_HH].pg_keep = 0;
       opll->slot[SLOT_HH].eg_state = RELEASE;
       opll->slot[SLOT_HH].eg_out = EG_MUTE;
+      opll->slot[SLOT_SD].type = 1;
       opll->slot[SLOT_SD].eg_state = RELEASE;
       opll->slot[SLOT_SD].eg_out = EG_MUTE;
       set_patch(opll, 7, opll->reg[0x37] >> 4);
     }
   } else if (new_rhythm_mode) {
     opll->patch_number[7] = 17;
-    opll->slot[SLOT_HH].type = 1;
+    opll->slot[SLOT_HH].type = 3;
     opll->slot[SLOT_HH].pg_keep = 1;
     opll->slot[SLOT_HH].eg_state = RELEASE;
     opll->slot[SLOT_HH].eg_out = EG_MUTE;
+    opll->slot[SLOT_SD].type = 3;
     opll->slot[SLOT_SD].eg_state = RELEASE;
     opll->slot[SLOT_SD].eg_out = EG_MUTE;
     set_slot_patch(&opll->slot[SLOT_HH], &opll->patch[17 * 2 + 0]);
@@ -526,19 +635,21 @@ static inline void update_rhythm_mode(OPLL *opll) {
   if (opll->patch_number[8] & 0x10) {
     if (!((BIT(slot_key_status, SLOT_CYM) && BIT(slot_key_status, SLOT_TOM)) | new_rhythm_mode)) {
       opll->slot[SLOT_TOM].type = 0;
-      opll->slot[SLOT_CYM].pg_keep = 0;
       opll->slot[SLOT_TOM].eg_state = RELEASE;
       opll->slot[SLOT_TOM].eg_out = EG_MUTE;
+      opll->slot[SLOT_CYM].type = 1;
+      opll->slot[SLOT_CYM].pg_keep = 0;
       opll->slot[SLOT_CYM].eg_state = RELEASE;
       opll->slot[SLOT_CYM].eg_out = EG_MUTE;
       set_patch(opll, 8, opll->reg[0x38] >> 4);
     }
   } else if (new_rhythm_mode) {
     opll->patch_number[8] = 18;
-    opll->slot[SLOT_TOM].type = 1;
-    opll->slot[SLOT_CYM].pg_keep = 1;
+    opll->slot[SLOT_TOM].type = 3;
     opll->slot[SLOT_TOM].eg_state = RELEASE;
     opll->slot[SLOT_TOM].eg_out = EG_MUTE;
+    opll->slot[SLOT_CYM].type = 3;
+    opll->slot[SLOT_CYM].pg_keep = 1;
     opll->slot[SLOT_CYM].eg_state = RELEASE;
     opll->slot[SLOT_CYM].eg_out = EG_MUTE;
     set_slot_patch(&opll->slot[SLOT_TOM], &opll->patch[18 * 2 + 0]);
@@ -673,7 +784,7 @@ static inline void calc_envelope(OPLL_SLOT *slot, OPLL_SLOT *slave_slot, uint16_
 
     if (slot->eg_out >= EG_MUTE) {
       slot->eg_out = EG_MUTE;
-      if (slot->type == 1) {
+      if (slot->type & 1) {
         slot->eg_state = ATTACK;
         slot->pg_phase = slot->pg_keep ? slot->pg_phase : 0;
         request_update(slot, UPDATE_EG);
@@ -704,8 +815,8 @@ static void update_slots(OPLL *opll) {
     }
     calc_phase(slot, opll->pm_phase);
 
-    OPLL_SLOT *slave_slot = (i < 14 || (opll->reg[0xe] & 32) == 0) ? &opll->slot[i - 1] : NULL;
-    calc_envelope(slot, slave_slot, opll->eg_counter);
+    OPLL_SLOT *slave = slot->type == 1 ? &opll->slot[i - 1] : NULL;
+    calc_envelope(slot, slave, opll->eg_counter);
   }
 }
 
@@ -799,65 +910,69 @@ static void update_output(OPLL *opll) {
   update_short_noise(opll);
   update_slots(opll);
 
+  int16_t *out = opll->ch_out;
+
   /* CH1-6 */
   for (int i = 0; i < 6; i++) {
     if (!(opll->mask & OPLL_MASK_CH(i))) {
-      opll->ch_out[i] += _MO(calc_slot_car(opll, i, calc_slot_mod(opll, i)));
+      out[i] = _MO(calc_slot_car(opll, i, calc_slot_mod(opll, i)));
     }
   }
 
   /* CH7 */
   if (opll->patch_number[6] <= 15) {
     if (!(opll->mask & OPLL_MASK_CH(6))) {
-      opll->ch_out[6] += _MO(calc_slot_car(opll, 6, calc_slot_mod(opll, 6)));
+      out[6] = _MO(calc_slot_car(opll, 6, calc_slot_mod(opll, 6)));
     }
   } else {
     if (!(opll->mask & OPLL_MASK_BD)) {
-      opll->ch_out[9] += _RO(calc_slot_car(opll, 6, calc_slot_mod(opll, 6)));
+      out[9] = _RO(calc_slot_car(opll, 6, calc_slot_mod(opll, 6)));
     }
   }
 
   /* CH8 */
   if (opll->patch_number[7] <= 15) {
     if (!(opll->mask & OPLL_MASK_CH(7))) {
-      opll->ch_out[7] += _MO(calc_slot_car(opll, 7, calc_slot_mod(opll, 7)));
+      out[7] = _MO(calc_slot_car(opll, 7, calc_slot_mod(opll, 7)));
     }
   } else {
     if (!(opll->mask & OPLL_MASK_HH)) {
-      opll->ch_out[10] += _RO(calc_slot_hat(opll));
+      out[10] = _RO(calc_slot_hat(opll));
     }
     if (!(opll->mask & OPLL_MASK_SD)) {
-      opll->ch_out[11] += _RO(calc_slot_snare(opll));
+      out[11] = _RO(calc_slot_snare(opll));
     }
   }
 
   /* CH9 */
   if (opll->patch_number[8] <= 15) {
     if (!(opll->mask & OPLL_MASK_CH(8))) {
-      opll->ch_out[8] += _MO(calc_slot_car(opll, 8, calc_slot_mod(opll, 8)));
+      out[8] = _MO(calc_slot_car(opll, 8, calc_slot_mod(opll, 8)));
     }
   } else {
     if (!(opll->mask & OPLL_MASK_TOM)) {
-      opll->ch_out[12] += _RO(calc_slot_tom(opll));
+      out[12] = _RO(calc_slot_tom(opll));
     }
     if (!(opll->mask & OPLL_MASK_CYM)) {
-      opll->ch_out[13] += _RO(calc_slot_cym(opll));
+      out[13] = _RO(calc_slot_cym(opll));
     }
   }
+}
 
+inline static void mix_output(OPLL *opll) {
+  int16_t out = 0;
   for (int i = 0; i < 15; i++) {
-    opll->ch_out[i] >>= 1;
+    out += opll->ch_out[i];
+  }
+  if (opll->conv) {
+    OPLL_RateConv_putData(opll->conv, 0, out);
+  } else {
+    opll->__out[0] = out;
   }
 }
 
-inline static int32_t mix_output(OPLL *opll) {
-  int32_t out = 0;
-  for (int i = 0; i < 15; i++)
-    out += opll->ch_out[i];
-  return out;
-}
-
-inline static void mix_output_stereo(OPLL *opll, int32_t out[2]) {
+inline static void mix_output_stereo(OPLL *opll) {
+  int16_t *out = opll->__out;
   out[0] = out[1] = 0;
   for (int i = 0; i < 15; i++) {
     if (opll->pan[i] & 1)
@@ -865,11 +980,10 @@ inline static void mix_output_stereo(OPLL *opll, int32_t out[2]) {
     if (opll->pan[i] & 2)
       out[0] += opll->ch_out[i];
   }
-}
-
-inline int16_t interporate_output(OPLL *opll, int16_t next, int16_t prev) {
-  return (int16_t)(((double)next * (opll->opll_step - opll->opll_time) + (double)prev * opll->opll_time) /
-                   opll->opll_step);
+  if (opll->conv) {
+    OPLL_RateConv_putData(opll->conv, 0, out[0]);
+    OPLL_RateConv_putData(opll->conv, 1, out[1]);
+  }
 }
 
 /***********************************************************
@@ -893,6 +1007,7 @@ OPLL *OPLL_new(uint32_t clk, uint32_t rate) {
   opll->clk = clk;
   opll->rate = rate;
   opll->mask = 0;
+  opll->conv = NULL;
 
   OPLL_reset(opll);
   OPLL_reset_patch(opll, 0);
@@ -900,12 +1015,30 @@ OPLL *OPLL_new(uint32_t clk, uint32_t rate) {
   return opll;
 }
 
-void OPLL_delete(OPLL *opll) { free(opll); }
+void OPLL_delete(OPLL *opll) {
+  if (opll->conv) {
+    OPLL_RateConv_delete(opll->conv);
+    opll->conv = NULL;
+  }
+  free(opll);
+}
 
 static void reset_rate_conversion_params(OPLL *opll) {
-  opll->real_step = (uint32_t)((1 << 31) / opll->rate);
-  opll->opll_step = (uint32_t)((1 << 31) / (opll->clk / 72));
-  opll->opll_time = 0;
+  const double f_out = opll->rate;
+  const double f_inp = opll->clk / 72;
+
+  opll->out_time = 0;
+  opll->out_step = f_inp;
+  opll->inp_step = f_out;
+
+  if (opll->conv) {
+    OPLL_RateConv_delete(opll->conv);
+    opll->conv = NULL;
+  }
+
+  if (floor(f_inp) != f_out && round(f_inp) != f_out) {
+    opll->conv = OPLL_RateConv_new(f_inp, f_out, 2);
+  }
 }
 
 void OPLL_reset(OPLL *opll) {
@@ -913,7 +1046,6 @@ void OPLL_reset(OPLL *opll) {
     return;
 
   opll->adr = 0;
-  opll->out = 0;
 
   opll->pm_phase = 0;
   opll->am_phase = 0;
@@ -939,11 +1071,16 @@ void OPLL_reset(OPLL *opll) {
 
   opll->pm_dphase = PM_DP_WIDTH / (1024 * 8);
 
-  for (int i = 0; i < 14; i++)
-    opll->pan[i] = 2;
-
   for (int i = 0; i < 15; i++)
+    opll->pan[i] = 3;
+
+  for (int i = 0; i < 15; i++) {
     opll->ch_out[i] = 0;
+  }
+
+  if (opll->conv) {
+    OPLL_RateConv_reset(opll->conv);
+  }
 }
 
 /* Force Refresh (When external program changes some parameters). */
@@ -960,15 +1097,14 @@ void OPLL_forceRefresh(OPLL *opll) {
   }
 }
 
+/* Once clock / 72 (typically 49716 or 49715 at 3.58MHz) is set, the internal rate converter is disabled. */
 void OPLL_setRate(OPLL *opll, uint32_t rate) {
   opll->rate = rate;
   reset_rate_conversion_params(opll);
 }
 
-void OPLL_setQuality(OPLL *opll, uint8_t q) {
-  // No Effects.
-  // This module always synthesizes output at the same rate with real chip (clock/72).
-}
+/* No effects. this module always synthesizes output at the same rate with real chip (clock/72). */
+void OPLL_setQuality(OPLL *opll, uint8_t q) {}
 
 /* mode = 0: opll 1: vrc7 */
 void OPLL_setChipMode(OPLL *opll, uint8_t mode) { opll->chip_mode = mode; }
@@ -1214,43 +1350,32 @@ void OPLL_resetPatch(OPLL *opll, int32_t type) {
 }
 
 int16_t OPLL_calc(OPLL *opll) {
-  int count = 0;
-  int16_t next = 0, prev = 0;
-
-  prev = mix_output(opll);
-
-  if (opll->real_step > opll->opll_time) {
-    while (opll->real_step > opll->opll_time) {
-      opll->opll_time += opll->opll_step;
-      update_output(opll);
-      count++;
-    }
+  while (opll->out_step > opll->out_time) {
+    opll->out_time += opll->inp_step;
+    update_output(opll);
+    mix_output(opll);
   }
-
-  opll->opll_time -= opll->real_step;
-  next = mix_output(opll);
-  opll->out = interporate_output(opll, next, prev);
-  return opll->out;
+  opll->out_time -= opll->out_step;
+  if (opll->conv) {
+    opll->__out[0] = OPLL_RateConv_getData(opll->conv, 0);
+  }
+  return opll->__out[0];
 }
 
 void OPLL_calcStereo(OPLL *opll, int32_t out[2]) {
-  int count = 0;
-  int32_t prev[2], next[2];
-
-  mix_output_stereo(opll, prev);
-
-  if (opll->real_step > opll->opll_time) {
-    while (opll->real_step > opll->opll_time) {
-      opll->opll_time += opll->opll_step;
-      update_output(opll);
-      count++;
-    }
+  while (opll->out_step > opll->out_time) {
+    opll->out_time += opll->inp_step;
+    update_output(opll);
+    mix_output_stereo(opll);
   }
-  opll->opll_time -= opll->real_step;
-
-  mix_output_stereo(opll, next);
-  out[0] = interporate_output(opll, next[0], prev[0]);
-  out[1] = interporate_output(opll, next[1], prev[1]);
+  opll->out_time -= opll->out_step;
+  if (opll->conv) {
+    out[0] = OPLL_RateConv_getData(opll->conv, 0);
+    out[1] = OPLL_RateConv_getData(opll->conv, 1);
+  } else {
+    out[0] = opll->__out[0];
+    out[1] = opll->__out[1];
+  }
 }
 
 uint32_t OPLL_setMask(OPLL *opll, uint32_t mask) {
