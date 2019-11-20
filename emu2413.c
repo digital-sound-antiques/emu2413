@@ -1,5 +1,5 @@
 /**
- * emu2413 v1.0.0-alpha6
+ * emu2413 v1.0.0-alpha7
  * https://github.com/digital-sound-antiques/emu2413
  * Copyright (C) 2019 Mitsutaka Okazaki
  */
@@ -260,10 +260,10 @@ static void makeSinTable(void) {
   }
 
   for (int x = 0; x < PG_WIDTH / 2; x++)
-    halfsin_table[x] = 0xfff;
+    halfsin_table[x] = fullsin_table[x];
 
   for (int x = PG_WIDTH / 2; x < PG_WIDTH; x++)
-    halfsin_table[x] = fullsin_table[x];
+    halfsin_table[x] = 0xfff;
 }
 
 static void makeTllTable(void) {
