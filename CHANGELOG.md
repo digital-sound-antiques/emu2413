@@ -1,8 +1,7 @@
-# v1.0.0-alpha6
-- Implement new sample rate converter.
+# v1.0.0-beta
+- Improve YM2413 ROM instruments.
 
-# v1.0.0-alpha5
-
+# v1.0.0-alpha7
 Major Update: playback quality has been drastically improved.
 
 - Change dB-based sine and exp tables to log2-based.
@@ -11,6 +10,7 @@ Major Update: playback quality has been drastically improved.
 - Improve envelope generator.
 - Fix the problem where key-on flags are not shared between rhythm and melody slots.
 - Semantic versioning.
+- Implement new sample rate converter.
 
 # v0.74 (2019 10-24)
 

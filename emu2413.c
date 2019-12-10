@@ -1,5 +1,5 @@
 /**
- * emu2413 v1.0.0-alpha7
+ * emu2413 v1.0.0-beta
  * https://github.com/digital-sound-antiques/emu2413
  * Copyright (C) 2019 Mitsutaka Okazaki
  */
