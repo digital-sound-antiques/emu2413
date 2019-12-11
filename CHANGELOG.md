@@ -1,4 +1,4 @@
-# v1.0.0-beta
+# v1.0.0-beta2
 - Improve YM2413 ROM instruments.
 
 # v1.0.0-alpha7
