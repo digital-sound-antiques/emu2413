@@ -9,8 +9,8 @@ Major Update: playback quality has been drastically improved.
 - Improve pitch and amplitude modulator.
 - Improve envelope generator.
 - Fix the problem where key-on flags are not shared between rhythm and melody slots.
+- Improve internal [sample rate converter](https://github.com/digital-sound-antiques/emu2413/wiki/Sample-Rate-Converter).
 - Semantic versioning.
-- Implement new sample rate converter.
 
 # v0.74 (2019 10-24)
 
