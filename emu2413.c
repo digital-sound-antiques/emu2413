@@ -762,9 +762,8 @@ static inline void calc_envelope(OPLL_SLOT *slot, OPLL_SLOT *slave_slot, uint16_
     if (slot->eg_rate_h > 0 && (eg_counter & mask) == 0) {
       slot->eg_out += lookup_decay_step(slot, eg_counter);
     }
-    if (slot->eg_out >= SL2EG(slot->patch->SL)) {
+    if ((slot->eg_out >> (EG_BITS - SL_BITS)) == slot->patch->SL) {
       slot->eg_state = SUSTAIN;
-      slot->eg_out = SL2EG(slot->patch->SL);
       request_update(slot, UPDATE_EG);
     }
     break;
