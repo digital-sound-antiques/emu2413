@@ -1,4 +1,5 @@
-# v1.0.0-beta2
+# v1.0.0-beta3
+- Improve envelope generator.
 - Improve YM2413 ROM instruments.
 
 # v1.0.0-alpha7
