@@ -1,3 +1,6 @@
+# v1.0.0-beta4
+- Support test register.
+
 # v1.0.0-beta3
 - Improve envelope generator.
 - Improve YM2413 ROM instruments.

@@ -1,5 +1,5 @@
 /**
- * emu2413 v1.0.0-beta3
+ * emu2413 v1.0.0-beta4
  * https://github.com/digital-sound-antiques/emu2413
  * Copyright (C) 2019 Mitsutaka Okazaki
  */
@@ -136,7 +136,7 @@ static OPLL_PATCH default_patch[OPLL_TONE_NUM][(16 + 3) * 2];
 
 /* LW is truncate length of sinc(x) calculation.
  * Lower LW is faster, higher LW results better quality.
- * LW must be a non-zero positive even number, no upper limit. 
+ * LW must be a non-zero positive even number, no upper limit.
  * LW=16 or greater is recommended when upsampling.
  * LW=8 is practically okay for downsampling.
  */
@@ -161,7 +161,7 @@ OPLL_RateConv *OPLL_RateConv_new(double f_inp, double f_out, int ch) {
   conv->ch = ch;
   conv->f_ratio = f_inp / f_out;
   conv->buf = malloc(sizeof(void *) * ch);
-  for(int i = 0 ; i < ch ; i++) {
+  for (int i = 0; i < ch; i++) {
     conv->buf[i] = malloc(sizeof(conv->buf[0][0]) * LW);
   }
 
@@ -190,7 +190,7 @@ static inline int16_t lookup_sinc_table(int16_t *table, double x) {
 
 void OPLL_RateConv_reset(OPLL_RateConv *conv) {
   conv->timer = 0;
-  for(int i = 0 ; i < conv->ch ; i++) {
+  for (int i = 0; i < conv->ch; i++) {
     memset(conv->buf[i], 0, sizeof(conv->buf[i][0]) * LW);
   }
 }
@@ -225,7 +225,7 @@ int16_t OPLL_RateConv_getData(OPLL_RateConv *conv, int ch) {
 }
 
 void OPLL_RateConv_delete(OPLL_RateConv *conv) {
-  for(int i=0;i<conv->ch;i++) {
+  for (int i = 0; i < conv->ch; i++) {
     free(conv->buf[i]);
   }
   free(conv->buf);
@@ -663,9 +663,16 @@ static inline void update_rhythm_mode(OPLL *opll) {
 }
 
 static void update_ampm(OPLL *opll) {
-  opll->pm_phase = (opll->pm_phase + opll->pm_dphase) & (PM_DP_WIDTH - 1);
+  const uint32_t pm_inc = (opll->test_flag & 8) ? opll->pm_dphase << 10 : opll->pm_dphase;
+  const uint32_t am_inc = (opll->test_flag & 8) ? 64 : 1;
+  if (opll->test_flag & 2) {
+    opll->pm_phase = 0;
+    opll->am_phase = 0;
+  } else {
+    opll->pm_phase = (opll->pm_phase + pm_inc) & (PM_DP_WIDTH - 1);
+    opll->am_phase += am_inc;
+  }
   opll->lfo_am = am_table[(opll->am_phase >> 6) % sizeof(am_table)];
-  opll->am_phase++;
 }
 
 static void update_noise(OPLL *opll) {
@@ -689,10 +696,14 @@ static void update_short_noise(OPLL *opll) {
   opll->short_noise = ((h_bit1 ^ h_bit6) | h_bit2) | (c_bit2 ^ c_bit4);
 }
 
-static inline void calc_phase(OPLL_SLOT *slot, int32_t pm_phase) {
+static inline void calc_phase(OPLL_SLOT *slot, int32_t pm_phase, uint8_t test) {
   const int8_t pm = slot->patch->PM ? pm_table[(slot->fnum >> 6) & 7][pm_phase >> (PM_DP_BITS - PM_PG_BITS)] : 0;
-  slot->pg_phase += (((slot->fnum & 0x1ff) * 2 + pm) * ml_table[slot->patch->ML]) << slot->blk >> 2;
-  slot->pg_phase &= (DP_WIDTH - 1);
+  if (test) {
+    slot->pg_phase = (((slot->fnum & 0x1ff) * 2 + pm) * ml_table[slot->patch->ML]) << slot->blk >> 2;
+  } else {
+    slot->pg_phase += (((slot->fnum & 0x1ff) * 2 + pm) * ml_table[slot->patch->ML]) << slot->blk >> 2;
+    slot->pg_phase &= (DP_WIDTH - 1);
+  }
   slot->pg_out = slot->pg_phase >> DP_BASE_BITS;
 }
 
@@ -738,7 +749,7 @@ static inline uint8_t lookup_decay_step(OPLL_SLOT *slot, uint32_t counter) {
   }
 }
 
-static inline void calc_envelope(OPLL_SLOT *slot, OPLL_SLOT *slave_slot, uint16_t eg_counter) {
+static inline void calc_envelope(OPLL_SLOT *slot, OPLL_SLOT *slave_slot, uint16_t eg_counter, uint8_t test) {
 
   uint32_t mask = (1 << slot->eg_shift) - 1;
   uint8_t s;
@@ -803,6 +814,10 @@ static inline void calc_envelope(OPLL_SLOT *slot, OPLL_SLOT *slave_slot, uint16_
     slot->eg_out = EG_MUTE;
     break;
   }
+
+  if (test) {
+    slot->eg_out = 0;
+  }
 }
 
 static void update_slots(OPLL *opll) {
@@ -814,10 +829,10 @@ static void update_slots(OPLL *opll) {
     if (slot->update_requests) {
       commit_slot_update(slot);
     }
-    calc_phase(slot, opll->pm_phase);
+    calc_phase(slot, opll->pm_phase, opll->test_flag & 4);
 
     OPLL_SLOT *slave = slot->type == 1 ? &opll->slot[i - 1] : NULL;
-    calc_envelope(slot, slave, opll->eg_counter);
+    calc_envelope(slot, slave, opll->eg_counter, opll->test_flag & 1);
   }
 }
 
@@ -1217,6 +1232,7 @@ void OPLL_writeReg(OPLL *opll, uint32_t reg, uint32_t data) {
     break;
 
   case 0x0f:
+    opll->test_flag = data;
     break;
 
   case 0x10:
