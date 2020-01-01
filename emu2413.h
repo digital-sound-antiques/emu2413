@@ -118,7 +118,7 @@ typedef struct __OPLL {
   OPLL_PATCH patch[19 * 2];
   int32_t patch_update[2]; /* flag for check patch update */
 
-  uint32_t pan[16];
+  uint8_t pan[16]; /* pan flag */
   uint32_t mask;
 
   /* output of each channels
@@ -137,25 +137,77 @@ void OPLL_delete(OPLL *);
 
 void OPLL_reset(OPLL *);
 void OPLL_resetPatch(OPLL *, int32_t);
-void OPLL_setRate(OPLL *opll, uint32_t r);
+
+/** 
+ * Set output wave sampling rate. 
+ * @param rate sampling rate. If clock / 72 (typically 49716 or 49715 at 3.58MHz) is set, the internal rate converter is disabled.
+ */
+void OPLL_setRate(OPLL *opll, uint32_t rate);
+
+/** 
+ * Set internal calcuration quality. Currently no effects, just for compatibility.
+ * >= v1.0.0 always synthesizes internal output at clock/72 Hz.
+ */
 void OPLL_setQuality(OPLL *opll, uint8_t q);
-void OPLL_setPan(OPLL *, uint32_t ch, uint32_t pan);
-void OPLL_setChipMode(OPLL *opll, uint8_t mode); /* mode:0 ym2413, mode:1 vrc7 */
 
-void OPLL_writeIO(OPLL *, uint32_t reg, uint32_t val);
-void OPLL_writeReg(OPLL *, uint32_t reg, uint32_t val);
+/** 
+ * Set pan pot (extra function - not YM2413 chip feature)
+ * @param pan 0
+ * ```
+ * pan: 76543210
+ *            |+- bit 1: enable Left output
+ *            +-- bit 0: enable Right output
+ * ```
+ */
+void OPLL_setPan(OPLL *opll, uint32_t ch, uint8_t pan);
 
-int16_t OPLL_calc(OPLL *);
-void OPLL_calcStereo(OPLL *, int32_t out[2]);
+/**
+ * Set chip mode
+ * @param mode 0:YM2413, 1:VRC7
+ */
+void OPLL_setChipMode(OPLL *opll, uint8_t mode); 
+
+void OPLL_writeIO(OPLL *opll, uint32_t reg, uint8_t val);
+void OPLL_writeReg(OPLL *opll, uint32_t reg, uint8_t val);
+
+/**
+ * Calculate sample
+ */
+int16_t OPLL_calc(OPLL *opll);
+
+/**
+ * Calulate stereo sample
+ */
+void OPLL_calcStereo(OPLL *opll, int32_t out[2]);
 
 void OPLL_setPatch(OPLL *, const uint8_t *dump);
 void OPLL_copyPatch(OPLL *, int32_t, OPLL_PATCH *);
+
+/** 
+ * Force to refresh. 
+ * External program should call this function after updating patch parameters.
+ */
 void OPLL_forceRefresh(OPLL *);
+
 void OPLL_dumpToPatch(const uint8_t *dump, OPLL_PATCH *patch);
 void OPLL_patchToDump(const OPLL_PATCH *patch, uint8_t *dump);
 void OPLL_getDefaultPatch(int32_t type, int32_t num, OPLL_PATCH *);
 
+/** 
+ *  Set channel mask flag 
+ *  @param mask mask flag
+ *  - bit 0 to 8: mask for ch 1 to 9 (OPLL_MASK_CH(i))
+ *  - bit 9: mask for Hi-Hat (OPLL_MASK_HH)
+ *  - bit 10: mask for Top-Cym (OPLL_MASK_CYM)
+ *  - bit 11: mask for Tom (OPLL_MASK_TOM)
+ *  - bit 12: mask for Snare Drum (OPLL_MASK_SD)
+ *  - bit 13: mask for Bass Drum (OPLL_MASK_BD)
+ */
 uint32_t OPLL_setMask(OPLL *, uint32_t mask);
+
+/**
+ * Toggler channel mask flag
+ */
 uint32_t OPLL_toggleMask(OPLL *, uint32_t mask);
 
 /* for compatibility */

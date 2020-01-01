@@ -1,19 +1,15 @@
-# v1.0.0-beta4
-- Support test register.
+# v1.0.0
+Major Update: playback quality and emulation accuracy have been improved drastically.
 
-# v1.0.0-beta3
-- Improve envelope generator.
-- Improve YM2413 ROM instruments.
-
-# v1.0.0-alpha7
-Major Update: playback quality has been drastically improved.
-
+- Improve [ROM instruments](https://github.com/digital-sound-antiques/emu2413/wiki/YM2413-Estimated-ROM-Instruments).
 - Change dB-based sine and exp tables to log2-based.
 - Improve damper rate when key-on.
 - Improve pitch and amplitude modulator.
 - Improve envelope generator.
 - Fix the problem where key-on flags are not shared between rhythm and melody slots.
 - Improve internal [sample rate converter](https://github.com/digital-sound-antiques/emu2413/wiki/Sample-Rate-Converter).
+- Implement test register.
+  - Both [test mode](https://github.com/digital-sound-antiques/emu2413/wiki/DAC-in-test-mode) and [non-test mode](https://github.com/digital-sound-antiques/emu2413/wiki/Use-FM-channel-as-DAC) DAC patterns are supported.
 - Semantic versioning.
 
 # v0.74 (2019 10-24)
