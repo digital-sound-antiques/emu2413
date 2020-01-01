@@ -1,5 +1,5 @@
 /**
- * emu2413 v1.0.0-beta4
+ * emu2413 v1.0.0
  * https://github.com/digital-sound-antiques/emu2413
  * Copyright (C) 2019 Mitsutaka Okazaki
  */
@@ -916,7 +916,7 @@ static inline int16_t calc_slot_hat(OPLL *opll) {
   return to_linear(slot->wave_table[phase], slot, 0);
 }
 
-#define _MO(x) ((x) >> 1)
+#define _MO(x) (-(x) >> 1)
 #define _RO(x) (x)
 
 static void update_output(OPLL *opll) {
