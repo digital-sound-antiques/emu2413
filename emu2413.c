@@ -206,11 +206,11 @@ static uint8_t am_table[210] = {0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1,  
 
 /* envelope decay increment step table */
 /* based on andete's research */
-static uint8_t eg_step_tables[4][16] = {
-    {0, 1, 0, 1, 0, 1, 0, 1, 0},
-    {0, 1, 0, 1, 1, 1, 0, 1, 0},
-    {0, 1, 1, 1, 0, 1, 1, 1, 0},
-    {0, 1, 1, 1, 1, 1, 1, 1, 0},
+static uint8_t eg_step_tables[4][8] = {
+    {0, 1, 0, 1, 0, 1, 0, 1},
+    {0, 1, 0, 1, 1, 1, 0, 1},
+    {0, 1, 1, 1, 0, 1, 1, 1},
+    {0, 1, 1, 1, 1, 1, 1, 1},
 };
 
 static uint32_t ml_table[16] = {1,     1 * 2, 2 * 2,  3 * 2,  4 * 2,  5 * 2,  6 * 2,  7 * 2,
