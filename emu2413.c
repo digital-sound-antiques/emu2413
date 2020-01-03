@@ -851,6 +851,18 @@ static INLINE uint8_t lookup_decay_step(OPLL_SLOT *slot, uint32_t counter) {
   }
 }
 
+static INLINE void finish_damp_state(OPLL_SLOT *slot) {
+  if (min(15, slot->patch->AR + (slot->rks >> 2)) == 15) {
+    slot->eg_state = DECAY;
+    slot->eg_out = 0;
+  } else {
+    slot->eg_state = ATTACK;
+    slot->eg_out = EG_MUTE;
+  }
+  slot->pg_phase = slot->pg_keep ? slot->pg_phase : 0;
+  request_update(slot, UPDATE_EG);
+}
+
 static INLINE void calc_envelope(OPLL_SLOT *slot, OPLL_SLOT *slave_slot, uint16_t eg_counter, uint8_t test) {
 
   uint32_t mask = (1 << slot->eg_shift) - 1;
@@ -858,16 +870,21 @@ static INLINE void calc_envelope(OPLL_SLOT *slot, OPLL_SLOT *slave_slot, uint16_
 
   switch (slot->eg_state) {
   case ATTACK:
-    if (slot->eg_rate_h > 0 && (eg_counter & mask & ~3) == 0) {
-      s = lookup_attack_step(slot, eg_counter);
-      if (0 < s) {
-        slot->eg_out = max(0, ((int)slot->eg_out - (slot->eg_out >> s) - 1));
-      }
-    }
-    if (slot->eg_rate_h == 15 || slot->eg_out == 0) {
-      slot->eg_state = DECAY;
-      slot->eg_out = 0;
+    if (slot->eg_rate_h == 15) {
+      /* when maximum eg_rate_h is set after key-on in attack state */
+      slot->eg_state = UNKNOWN;
       request_update(slot, UPDATE_EG);
+    } else {
+      if (0 < slot->eg_out && slot->eg_rate_h > 0 && (eg_counter & mask & ~3) == 0) {
+        s = lookup_attack_step(slot, eg_counter);
+        if (0 < s) {
+          slot->eg_out = max(0, ((int)slot->eg_out - (slot->eg_out >> s) - 1));
+        }
+      }
+      if (slot->eg_out == 0) {
+        slot->eg_state = DECAY;
+        request_update(slot, UPDATE_EG);
+      }
     }
     break;
 
@@ -895,25 +912,19 @@ static INLINE void calc_envelope(OPLL_SLOT *slot, OPLL_SLOT *slave_slot, uint16_
     if (slot->eg_rate_h > 0 && (eg_counter & mask) == 0) {
       slot->eg_out += lookup_decay_step(slot, eg_counter);
     }
-
     if (slot->eg_out >= EG_MUTE) {
       slot->eg_out = EG_MUTE;
-      if (slot->type & 1) {
-        slot->eg_state = ATTACK;
-        slot->pg_phase = slot->pg_keep ? slot->pg_phase : 0;
-        request_update(slot, UPDATE_EG);
+      if ((slot->type & 1) && (!slave_slot || slave_slot->eg_out >= EG_MUTE)) {
+        finish_damp_state(slot);
         if (slave_slot) {
-          slave_slot->eg_state = ATTACK;
-          slave_slot->eg_out = EG_MUTE;
-          slave_slot->pg_phase = slave_slot->pg_keep ? slave_slot->pg_phase : 0;
-          request_update(slave_slot, UPDATE_EG);
+          finish_damp_state(slave_slot);
         }
       }
     }
     break;
 
+  case UNKNOWN:
   default:
-    slot->eg_out = EG_MUTE;
     break;
   }
 
