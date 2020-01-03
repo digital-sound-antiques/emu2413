@@ -11,6 +11,7 @@ Major Update: playback quality and emulation accuracy have been improved drastic
 - Implement test register.
   - Both [test mode](https://github.com/digital-sound-antiques/emu2413/wiki/DAC-in-test-mode) and [non-test mode](https://github.com/digital-sound-antiques/emu2413/wiki/Use-FM-channel-as-DAC) DAC patterns are supported.
 - Semantic versioning.
+- Support C90/VS2010 again.
 
 # v0.74 (2019 10-24)
 
