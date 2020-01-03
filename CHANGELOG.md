@@ -1,4 +1,4 @@
-# v1.1.0
+# v1.1.0 (2020 01-03)
 Major Update: playback quality and emulation accuracy have been improved drastically.
 
 - Improve [ROM instruments](https://github.com/digital-sound-antiques/emu2413/wiki/YM2413-Estimated-ROM-Instruments).
