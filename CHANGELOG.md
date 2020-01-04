@@ -14,6 +14,7 @@ Major Update: playback quality and emulation accuracy have been improved drastic
 - Improve internal [sample rate converter](https://github.com/digital-sound-antiques/emu2413/wiki/Sample-Rate-Converter).
 - Implement test register.
   - Both [test mode](https://github.com/digital-sound-antiques/emu2413/wiki/DAC-in-test-mode) and [non-test mode](https://github.com/digital-sound-antiques/emu2413/wiki/Use-FM-channel-as-DAC) DAC patterns are supported.
+  - There are still very few VGMs using YM2413 DAC on the web. If you would like to test it, try [vgm-conv](https://github.com/digital-sound-antiques/vgm-conv) which is capable to generate DAC stream from YM2612 VGM files.
 - Semantic versioning.
 - Support VS2010 again.
 
