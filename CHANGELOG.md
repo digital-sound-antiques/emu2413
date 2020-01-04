@@ -1,5 +1,5 @@
 # v1.2.1 (2020 01-05)
-- Support mirror registers: 0x19-1f, 0x20-1f and 0x30-3f.
+- Support mirror registers: 0x19-1f, 0x29-1f and 0x39-3f.
 - Fix feedback model.
 - Fix Synthesizer modulator attack.
 
