@@ -1,5 +1,5 @@
 /**
- * emu2413 v1.1.0
+ * emu2413 v1.2.0
  * https://github.com/digital-sound-antiques/emu2413
  * Copyright (C) 2020 Mitsutaka Okazaki
  */
@@ -92,10 +92,6 @@ static uint8_t default_inst[OPLL_TONE_NUM][(16 + 3) * 8] = {{
 #define DP_BITS 19
 #define DP_WIDTH (1 << DP_BITS)
 #define DP_BASE_BITS (DP_BITS - PG_BITS)
-
-#define wave2_2pi(e) (e >> 2)
-#define wave2_4pi(e) (wave2_2pi(e) << 1)
-#define wave2_8pi(e) (wave2_4pi(e) << 1)
 
 /* dynamic range of envelope output */
 #define EG_STEP 0.375
@@ -558,7 +554,6 @@ static void reset_slot(OPLL_SLOT *slot, int number) {
   slot->pg_phase = 0;
   slot->output[0] = 0;
   slot->output[1] = 0;
-  slot->feedback = 0;
   slot->eg_state = RELEASE;
   slot->eg_shift = 0;
   slot->rks = 0;
@@ -972,20 +967,19 @@ static INLINE int16_t calc_slot_car(OPLL *opll, int ch, int16_t fm) {
 
   uint8_t am = slot->patch->AM ? opll->lfo_am : 0;
 
-  return to_linear(slot->wave_table[(slot->pg_out + wave2_8pi(fm)) & (PG_WIDTH - 1)], slot, am);
+  return to_linear(slot->wave_table[(slot->pg_out + 2 * fm) & (PG_WIDTH - 1)], slot, am);
 }
 
 static INLINE int16_t calc_slot_mod(OPLL *opll, int ch) {
   OPLL_SLOT *slot = MOD(opll, ch);
 
-  int16_t fm = slot->patch->FB > 0 ? wave2_4pi(slot->feedback) >> (7 - slot->patch->FB) : 0;
+  int16_t fm = slot->patch->FB > 0 ? (slot->output[1] + slot->output[0]) >> (8 - slot->patch->FB) : 0;
   uint8_t am = slot->patch->AM ? opll->lfo_am : 0;
 
   slot->output[1] = slot->output[0];
-  slot->output[0] = to_linear(slot->wave_table[(slot->pg_out + fm) & (PG_WIDTH - 1)], slot, am);
-  slot->feedback = (slot->output[1] + slot->output[0]) >> 1;
-
-  return slot->feedback;
+  slot->output[0] = to_linear(slot->wave_table[(slot->pg_out + fm) & (PG_WIDTH - 1)], slot, am) >> 1;
+  
+  return slot->output[0];
 }
 
 static INLINE int16_t calc_slot_tom(OPLL *opll) {
@@ -1255,6 +1249,12 @@ void OPLL_writeReg(OPLL *opll, uint32_t reg, uint8_t data) {
 
   data = data & 0xff;
   reg = reg & 0x3f;
+
+  /* mirror registers */
+  if ((0x19 <= reg && reg <= 0x1f) || (0x29 <= reg && reg <= 0x2f) || (0x39 <= reg && reg <= 0x3f)) {
+    reg -= 9;
+  }
+
   opll->reg[reg] = (uint8_t)data;
 
   switch (reg) {

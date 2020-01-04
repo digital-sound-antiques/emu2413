@@ -30,7 +30,6 @@ typedef struct __OPLL_SLOT {
   OPLL_PATCH *patch; /* voice parameter */
 
   /* slot output */
-  int32_t feedback;  /* amount of feedback */
   int32_t output[2]; /* output value, latest and previous. */
 
   /* phase generator (pg) */
