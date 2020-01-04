@@ -1,6 +1,7 @@
-# v1.2.0 (2020 01-05)
+# v1.2.1 (2020 01-05)
 - Support mirror registers: 0x19-1f, 0x20-1f and 0x30-3f.
 - Fix feedback model.
+- Fix Synthesizer modulator attack.
 
 # v1.1.0 (2020 01-03)
 Major Update: playback quality and emulation accuracy have been improved drastically.
