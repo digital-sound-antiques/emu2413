@@ -570,10 +570,8 @@ static void reset_slot(OPLL_SLOT *slot, int number) {
 
 static INLINE void slotOn(OPLL *opll, int i) {
   OPLL_SLOT *slot = &opll->slot[i];
-  if (slot->type & 1) {
-    slot->eg_state = DAMP;
-    request_update(slot, UPDATE_EG);
-  }
+  slot->eg_state = DAMP;
+  request_update(slot, UPDATE_EG);
 }
 
 static INLINE void slotOff(OPLL *opll, int i) {
@@ -881,7 +879,7 @@ static INLINE void calc_envelope(OPLL_SLOT *slot, OPLL_SLOT *slave_slot, uint16_
   switch (slot->eg_state) {
   case DAMP:
     if (slot->eg_out == EG_MUTE) {
-      if (slot->type & 1) {
+      if ((slot->type & 1) && (!slave_slot || slave_slot->eg_out == EG_MUTE)) {
         finish_damp_state(slot);
         if (slave_slot) {
           finish_damp_state(slave_slot);
