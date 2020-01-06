@@ -1,3 +1,6 @@
+# v1.2.3 (2020 01-07)
+- Remove modulator phase delay.
+
 # v1.2.2 (2020 01-06)
 - Fix envelope behavior if ARx4+Rks >= 60 is set during attack phase.
 - Tweak ROM voice parameters.
