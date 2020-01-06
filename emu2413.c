@@ -97,6 +97,7 @@ static uint8_t default_inst[OPLL_TONE_NUM][(16 + 3) * 8] = {{
 #define EG_STEP 0.375
 #define EG_BITS 7
 #define EG_MUTE ((1 << EG_BITS) - 1)
+#define EG_MAX (EG_MUTE - 3)
 
 /* dynamic range of total level */
 #define TL_STEP 0.75
@@ -878,8 +879,8 @@ static INLINE void calc_envelope(OPLL_SLOT *slot, OPLL_SLOT *slave_slot, uint16_
 
   switch (slot->eg_state) {
   case DAMP:
-    if (slot->eg_out == EG_MUTE) {
-      if ((slot->type & 1) && (!slave_slot || slave_slot->eg_out == EG_MUTE)) {
+    if (slot->eg_out >= EG_MAX) {
+      if ((slot->type & 1) && (!slave_slot || slave_slot->eg_out >= EG_MAX)) {
         finish_damp_state(slot);
         if (slave_slot) {
           finish_damp_state(slave_slot);
@@ -940,7 +941,7 @@ static INLINE int16_t lookup_exp_table(uint16_t i) {
 
 static INLINE int16_t to_linear(uint16_t h, OPLL_SLOT *slot, int16_t am) {
   uint16_t att;
-  if (slot->eg_out >= (EG_MUTE - 3))
+  if (slot->eg_out >= EG_MAX)
     return 0;
 
   att = min(127, (slot->eg_out + slot->tll + am)) << 4;
@@ -962,7 +963,7 @@ static INLINE int16_t calc_slot_mod(OPLL *opll, int ch) {
   uint8_t am = slot->patch->AM ? opll->lfo_am : 0;
 
   slot->output[1] = slot->output[0];
-  slot->output[0] = to_linear(slot->wave_table[(slot->pg_out + fm) & (PG_WIDTH - 1)], slot, am) >> 1;
+  slot->output[0] = to_linear(slot->wave_table[(slot->pg_out - 1 + fm) & (PG_WIDTH - 1)], slot, am) >> 1;
   
   return slot->output[0];
 }
