@@ -784,14 +784,14 @@ static void update_short_noise(OPLL *opll) {
   const uint32_t pg_hh = opll->slot[SLOT_HH].pg_out;
   const uint32_t pg_cym = opll->slot[SLOT_CYM].pg_out;
 
-  const uint8_t h_bit1 = BIT(pg_hh, PG_BITS - 8);
-  const uint8_t h_bit6 = BIT(pg_hh, PG_BITS - 3);
-  const uint8_t h_bit2 = BIT(pg_hh, PG_BITS - 7);
+  const uint8_t h_bit2 = BIT(pg_hh, PG_BITS - 8);
+  const uint8_t h_bit7 = BIT(pg_hh, PG_BITS - 3);
+  const uint8_t h_bit3 = BIT(pg_hh, PG_BITS - 7);
 
-  const uint8_t c_bit2 = BIT(pg_cym, PG_BITS - 7);
-  const uint8_t c_bit4 = BIT(pg_cym, PG_BITS - 5);
+  const uint8_t c_bit3 = BIT(pg_cym, PG_BITS - 7);
+  const uint8_t c_bit5 = BIT(pg_cym, PG_BITS - 5);
 
-  opll->short_noise = ((h_bit1 ^ h_bit6) | h_bit2) | (c_bit2 ^ c_bit4);
+  opll->short_noise = (h_bit2 ^ h_bit7) | (h_bit3 ^ c_bit5) | (c_bit3 ^ c_bit5);
 }
 
 static INLINE void calc_phase(OPLL_SLOT *slot, int32_t pm_phase, uint8_t test) {
