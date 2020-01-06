@@ -963,7 +963,7 @@ static INLINE int16_t calc_slot_mod(OPLL *opll, int ch) {
   uint8_t am = slot->patch->AM ? opll->lfo_am : 0;
 
   slot->output[1] = slot->output[0];
-  slot->output[0] = to_linear(slot->wave_table[(slot->pg_out - 1 + fm) & (PG_WIDTH - 1)], slot, am) >> 1;
+  slot->output[0] = to_linear(slot->wave_table[(slot->pg_out + fm) & (PG_WIDTH - 1)], slot, am) >> 1;
   
   return slot->output[0];
 }
