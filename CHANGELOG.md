@@ -4,7 +4,7 @@
 - Refactor envelope generator.
 
 # v1.2.0 (2020 01-05)
-- Support mirror registers: 0x19-1f, 0x20-1f and 0x30-3f.
+- Support mirror registers: 0x19-1f, 0x29-1f and 0x39-3f.
 - Fix feedback model.
 
 # v1.1.0 (2020 01-03)
