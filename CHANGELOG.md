@@ -1,6 +1,7 @@
-# v1.2.1 (2020 01-06)
-- Pause attack envelop if ARx4+Rks >= 60.
-- Update voice parameters.
+# v1.2.2 (2020 01-06)
+- Fix envelope behavior if ARx4+Rks >= 60 is set during attack phase.
+- Tweak ROM voice parameters.
+- Refactor envelope generator.
 
 # v1.2.0 (2020 01-05)
 - Support mirror registers: 0x19-1f, 0x20-1f and 0x30-3f.
