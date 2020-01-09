@@ -1,3 +1,9 @@
+# v1.2.5 (2020 01-10)
+- Fix [timing of envelope damping](https://github.com/digital-sound-antiques/emu2413/wiki/Envelope-Damp-and-KeyOn-Noise).
+
+# v1.2.4 (2020 01-07)
+- Fix top-cym and hi-hat calculation.
+
 # v1.2.3 (2020 01-07)
 - Remove modulator phase delay.
 
