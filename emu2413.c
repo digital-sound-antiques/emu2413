@@ -1,5 +1,5 @@
 /**
- * emu2413 v1.2.5
+ * emu2413 v1.2.6
  * https://github.com/digital-sound-antiques/emu2413
  * Copyright (C) 2020 Mitsutaka Okazaki
  *
@@ -861,21 +861,16 @@ static INLINE void start_envelope(OPLL_SLOT *slot) {
     slot->eg_state = ATTACK;
     slot->eg_out = EG_MUTE;
   }
-  slot->pg_phase = slot->pg_keep ? slot->pg_phase : 0;
+  if (!slot->pg_keep) {
+    slot->pg_phase = 0;
+  }
   request_update(slot, UPDATE_EG);
 }
 
-static INLINE void calc_envelope(OPLL_SLOT *slot, OPLL_SLOT *mod_slot, uint16_t eg_counter, uint8_t test) {
+static INLINE void calc_envelope(OPLL_SLOT *slot, OPLL_SLOT *buddy, uint16_t eg_counter, uint8_t test) {
 
   uint32_t mask = (1 << slot->eg_shift) - 1;
   uint8_t s;
-
-  if (slot->eg_state != DAMP && mod_slot && mod_slot->eg_state == DAMP) {
-    if (mod_slot->eg_out >= EG_MAX) {
-      start_envelope(mod_slot);
-      slot->pg_phase = slot->pg_keep ? slot->pg_phase : 0;
-    }
-  }
 
   if (slot->eg_state == ATTACK) {
     if (0 < slot->eg_out && slot->eg_rate_h > 0 && (eg_counter & mask & ~3) == 0) {
@@ -893,8 +888,9 @@ static INLINE void calc_envelope(OPLL_SLOT *slot, OPLL_SLOT *mod_slot, uint16_t 
   switch (slot->eg_state) {
   case DAMP:
     if (slot->eg_out >= EG_MAX) {
-      if (slot->type & 1) {
-        start_envelope(slot);
+      start_envelope(slot);
+      if (buddy && !buddy->pg_keep) {
+        buddy->pg_phase = 0;
       }
     }
     break;
@@ -930,12 +926,18 @@ static void update_slots(OPLL *opll) {
 
   for (i = 0; i < 18; i++) {
     OPLL_SLOT *slot = &opll->slot[i];
-    OPLL_SLOT *mod_slot = (slot->type == 1) ? &opll->slot[i-1] : NULL;
+    OPLL_SLOT *buddy = NULL;
+    if (slot->type == 0) {
+      buddy = &opll->slot[i + 1];
+    }
+    if (slot->type == 1) {
+      buddy = &opll->slot[i - 1];
+    }
     if (slot->update_requests) {
       commit_slot_update(slot);
     }
+    calc_envelope(slot, buddy, opll->eg_counter, opll->test_flag & 1);
     calc_phase(slot, opll->pm_phase, opll->test_flag & 4);
-    calc_envelope(slot, mod_slot, opll->eg_counter, opll->test_flag & 1);
   }
 }
 
