@@ -962,7 +962,7 @@ static INLINE int16_t calc_slot_car(OPLL *opll, int ch, int16_t fm) {
   uint8_t am = slot->patch->AM ? opll->lfo_am : 0;
 
   slot->output[1] = slot->output[0];
-  slot->output[0] = to_linear(slot->wave_table[(slot->pg_out + 2 * fm) & (PG_WIDTH - 1)], slot, am);
+  slot->output[0] = to_linear(slot->wave_table[(slot->pg_out + 2 * (fm >> 1)) & (PG_WIDTH - 1)], slot, am);
   
   return slot->output[0];
 }
@@ -970,11 +970,11 @@ static INLINE int16_t calc_slot_car(OPLL *opll, int ch, int16_t fm) {
 static INLINE int16_t calc_slot_mod(OPLL *opll, int ch) {
   OPLL_SLOT *slot = MOD(opll, ch);
 
-  int16_t fm = slot->patch->FB > 0 ? (slot->output[1] + slot->output[0]) >> (8 - slot->patch->FB) : 0;
+  int16_t fm = slot->patch->FB > 0 ? (slot->output[1] + slot->output[0]) >> (9 - slot->patch->FB) : 0;
   uint8_t am = slot->patch->AM ? opll->lfo_am : 0;
 
   slot->output[1] = slot->output[0];
-  slot->output[0] = to_linear(slot->wave_table[(slot->pg_out + fm) & (PG_WIDTH - 1)], slot, am) >> 1;
+  slot->output[0] = to_linear(slot->wave_table[(slot->pg_out + fm) & (PG_WIDTH - 1)], slot, am);
 
   return slot->output[0];
 }
