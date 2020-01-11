@@ -437,8 +437,6 @@ static void initializeTables() {
 #define CAR(o, x) (&(o)->slot[((x) << 1) | 1])
 #define BIT(s, b) (((s) >> (b)) & 1)
 
-#define OPLL_DEBUG 0
-
 #if OPLL_DEBUG
 static void _debug_print_patch(OPLL_SLOT *slot) {
   OPLL_PATCH *p = slot->patch;
@@ -963,7 +961,10 @@ static INLINE int16_t calc_slot_car(OPLL *opll, int ch, int16_t fm) {
 
   uint8_t am = slot->patch->AM ? opll->lfo_am : 0;
 
-  return to_linear(slot->wave_table[(slot->pg_out + 2 * fm) & (PG_WIDTH - 1)], slot, am);
+  slot->output[1] = slot->output[0];
+  slot->output[0] = to_linear(slot->wave_table[(slot->pg_out + 2 * fm) & (PG_WIDTH - 1)], slot, am);
+  
+  return slot->output[0];
 }
 
 static INLINE int16_t calc_slot_mod(OPLL *opll, int ch) {

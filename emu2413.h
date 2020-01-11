@@ -7,6 +7,8 @@
 extern "C" {
 #endif
 
+#define OPLL_DEBUG 0
+
 typedef enum __OPLL_EG_STATE { ATTACK, DECAY, SUSTAIN, RELEASE, DAMP, UNKNOWN } OPLL_EG_STATE;
 
 enum OPLL_TONE_ENUM { OPLL_2413_TONE = 0, OPLL_VRC7_TONE = 1, OPLL_281B_TONE = 2 };
@@ -52,9 +54,11 @@ typedef struct __OPLL_SLOT {
   uint32_t eg_shift;        /* shift for eg global counter, controls envelope speed */
   uint32_t eg_out;          /* eg output */
 
-  uint8_t last_eg_state;
-
   uint32_t update_requests; /* flags to debounce update */
+
+#if OPLL_DEBUG
+  uint8_t last_eg_state;
+#endif
 } OPLL_SLOT;
 
 /* mask */
