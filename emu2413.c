@@ -1086,7 +1086,7 @@ static void update_output(OPLL *opll) {
 INLINE static void mix_output(OPLL *opll) {
   int16_t out = 0;
   int i;
-  for (i = 0; i < 15; i++) {
+  for (i = 0; i < 14; i++) {
     out += opll->ch_out[i];
   }
   if (opll->conv) {
@@ -1100,7 +1100,7 @@ INLINE static void mix_output_stereo(OPLL *opll) {
   int16_t *out = opll->mix_out;
   int i;
   out[0] = out[1] = 0;
-  for (i = 0; i < 15; i++) {
+  for (i = 0; i < 14; i++) {
     if (opll->pan[i] & 1)
       out[1] += opll->ch_out[i];
     if (opll->pan[i] & 2)
@@ -1211,7 +1211,7 @@ void OPLL_reset(OPLL *opll) {
   for (i = 0; i < 15; i++)
     opll->pan[i] = 3;
 
-  for (i = 0; i < 15; i++) {
+  for (i = 0; i < 14; i++) {
     opll->ch_out[i] = 0;
   }
 }
