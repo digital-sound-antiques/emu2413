@@ -1,4 +1,7 @@
-# v1.2.5 (2020 01-10)
+# v1.2.7 (2020 01-12)
+- Reactivate output array of carrier slot for backward compatibility.
+
+# v1.2.6 (2020 01-11)
 - Fix [timing of envelope damping](https://github.com/digital-sound-antiques/emu2413/wiki/Envelope-Damp-and-KeyOn-Noise).
 
 # v1.2.4 (2020 01-07)

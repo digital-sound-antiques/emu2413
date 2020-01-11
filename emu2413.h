@@ -25,7 +25,7 @@ typedef struct __OPLL_SLOT {
   /* type flags:
    * 000000SM 
    *       |+-- M: 0:modulator 1:carrier
-   *       +--- S: 0:normal 1:single mode (used as sd, tom, hh,top-cym) 
+   *       +--- S: 0:normal 1:single slot mode (sd, tom, hh or cym) 
    */
   uint8_t type;
 
@@ -85,7 +85,6 @@ void OPLL_RateConv_putData(OPLL_RateConv *conv, int ch, int16_t data);
 int16_t OPLL_RateConv_getData(OPLL_RateConv *conv, int ch);
 void OPLL_RateConv_delete(OPLL_RateConv *conv);
 
-/* opll */
 typedef struct __OPLL {
   uint32_t clk;
   uint32_t rate;
@@ -103,7 +102,7 @@ typedef struct __OPLL {
   uint32_t slot_key_status;
   uint8_t rhythm_mode;
 
-  uint32_t eg_counter; /* global counter for envelope */
+  uint32_t eg_counter;
 
   uint32_t pm_phase;
   uint32_t pm_dphase;
@@ -119,19 +118,17 @@ typedef struct __OPLL {
   int32_t patch_number[9];
   OPLL_SLOT slot[18];
   OPLL_PATCH patch[19 * 2];
-  int32_t patch_update[2]; /* flag for check patch update */
+  int32_t patch_update[2];
 
-  uint8_t pan[16]; /* pan flag */
+  uint8_t pan[16];
   uint32_t mask;
 
-  /* output of each channels
-   * 0-8:TONE
-   * 9:BD 10:HH 11:SD, 12:TOM, 13:CYM
-   * 14:reserved for dac
-   */
-  int16_t ch_out[15];
+  /* channel output */
+  /* 0..8:tone 9:bd 10:hh 11:sd 12:tom 13:cym */
+  int16_t ch_out[14];
 
   int16_t mix_out[2];
+
   OPLL_RateConv *conv;
 } OPLL;
 
@@ -155,7 +152,8 @@ void OPLL_setQuality(OPLL *opll, uint8_t q);
 
 /** 
  * Set pan pot (extra function - not YM2413 chip feature)
- * @param pan 0
+ * @param ch 0..8:tone 9:bd 10:hh 11:sd 12:tom 13:cym
+ * @param pan 0:mute 1:right 2:left 3:center 
  * ```
  * pan: 76543210
  *            |+- bit 1: enable Left output
@@ -165,8 +163,8 @@ void OPLL_setQuality(OPLL *opll, uint8_t q);
 void OPLL_setPan(OPLL *opll, uint32_t ch, uint8_t pan);
 
 /**
- * Set chip mode
- * @param mode 0:YM2413, 1:VRC7
+ * Set chip mode. If vrc7 is selected, r#14 is ignored.
+ * @param mode 0:ym2413 1:vrc7
  */
 void OPLL_setChipMode(OPLL *opll, uint8_t mode); 
 
@@ -197,9 +195,9 @@ void OPLL_patchToDump(const OPLL_PATCH *patch, uint8_t *dump);
 void OPLL_getDefaultPatch(int32_t type, int32_t num, OPLL_PATCH *);
 
 /** 
- *  Set channel mask flag 
- *  @param mask mask flag
- *  - bit 0 to 8: mask for ch 1 to 9 (OPLL_MASK_CH(i))
+ *  Set channel mask 
+ *  @param mask mask flag: OPLL_MASK_* can be used.
+ *  - bit 0..8: mask for ch 1 to 9 (OPLL_MASK_CH(i))
  *  - bit 9: mask for Hi-Hat (OPLL_MASK_HH)
  *  - bit 10: mask for Top-Cym (OPLL_MASK_CYM)
  *  - bit 11: mask for Tom (OPLL_MASK_TOM)
