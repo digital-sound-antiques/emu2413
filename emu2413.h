@@ -121,6 +121,8 @@ typedef struct __OPLL {
   int32_t patch_update[2];
 
   uint8_t pan[16];
+  float pan_fine[16][2];
+
   uint32_t mask;
 
   /* channel output */
@@ -152,7 +154,7 @@ void OPLL_setQuality(OPLL *opll, uint8_t q);
 
 /** 
  * Set pan pot (extra function - not YM2413 chip feature)
- * @param ch 0..8:tone 9:bd 10:hh 11:sd 12:tom 13:cym
+ * @param ch 0..8:tone 9:bd 10:hh 11:sd 12:tom 13:cym 14,15:reserved
  * @param pan 0:mute 1:right 2:left 3:center 
  * ```
  * pan: 76543210
@@ -161,6 +163,15 @@ void OPLL_setQuality(OPLL *opll, uint8_t q);
  * ```
  */
 void OPLL_setPan(OPLL *opll, uint32_t ch, uint8_t pan);
+
+/**
+ * Fine-grained panning
+ * @param ch 0..8:tone 9:bd 10:hh 11:sd 12:tom 13:cym 14,15:reserved
+ * @param pan output strength for left/right channel. 
+ *            pan[0]: left strength, pan[1]: right strength. 
+ *            by default, pan[0]=pan[1]=1.0f for center.
+ */
+void OPLL_setPanFine(OPLL *opll, uint32_t ch, float pan[2]);
 
 /**
  * Set chip mode. If vrc7 is selected, r#14 is ignored.
@@ -215,6 +226,7 @@ uint32_t OPLL_toggleMask(OPLL *, uint32_t mask);
 #define OPLL_set_rate OPLL_setRate
 #define OPLL_set_quality OPLL_setQuality
 #define OPLL_set_pan OPLL_setPan
+#define OPLL_set_pan_fine OPLL_setPanFine
 #define OPLL_calc_stereo OPLL_calcStereo
 #define OPLL_reset_patch OPLL_resetPatch
 #define OPLL_dump2patch OPLL_dumpToPatch

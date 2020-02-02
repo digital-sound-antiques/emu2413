@@ -1,5 +1,5 @@
 /**
- * emu2413 v1.2.7
+ * emu2413 v1.3.0
  * https://github.com/digital-sound-antiques/emu2413
  * Copyright (C) 2020 Mitsutaka Okazaki
  *
@@ -963,7 +963,7 @@ static INLINE int16_t calc_slot_car(OPLL *opll, int ch, int16_t fm) {
 
   slot->output[1] = slot->output[0];
   slot->output[0] = to_linear(slot->wave_table[(slot->pg_out + 2 * (fm >> 1)) & (PG_WIDTH - 1)], slot, am);
-  
+
   return slot->output[0];
 }
 
@@ -1101,10 +1101,10 @@ INLINE static void mix_output_stereo(OPLL *opll) {
   int i;
   out[0] = out[1] = 0;
   for (i = 0; i < 14; i++) {
-    if (opll->pan[i] & 1)
-      out[1] += opll->ch_out[i];
     if (opll->pan[i] & 2)
-      out[0] += opll->ch_out[i];
+      out[0] += (int16_t)(opll->ch_out[i] * opll->pan_fine[i][0]);
+    if (opll->pan[i] & 1)
+      out[1] += (int16_t)(opll->ch_out[i] * opll->pan_fine[i][1]);
   }
   if (opll->conv) {
     OPLL_RateConv_putData(opll->conv, 0, out[0]);
@@ -1208,8 +1208,10 @@ void OPLL_reset(OPLL *opll) {
 
   opll->pm_dphase = PM_DP_WIDTH / (1024 * 8);
 
-  for (i = 0; i < 15; i++)
+  for (i = 0; i < 15; i++) {
     opll->pan[i] = 3;
+    opll->pan_fine[i][1] = opll->pan_fine[i][0] = 1.0f;
+  }
 
   for (i = 0; i < 14; i++) {
     opll->ch_out[i] = 0;
@@ -1424,7 +1426,12 @@ void OPLL_writeIO(OPLL *opll, uint32_t adr, uint8_t val) {
     opll->adr = val;
 }
 
-void OPLL_setPan(OPLL *opll, uint32_t ch, uint8_t pan) { opll->pan[ch & 15] = pan & 3; }
+void OPLL_setPan(OPLL *opll, uint32_t ch, uint8_t pan) { opll->pan[ch & 15] = pan; }
+
+void OPLL_setPanFine(OPLL *opll, uint32_t ch, float pan[2]) {
+  opll->pan_fine[ch & 15][0] = pan[0];
+  opll->pan_fine[ch & 15][1] = pan[1];
+}
 
 void OPLL_dumpToPatch(const uint8_t *dump, OPLL_PATCH *patch) {
   patch[0].AM = (dump[0] >> 7) & 1;

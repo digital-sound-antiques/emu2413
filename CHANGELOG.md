@@ -1,3 +1,6 @@
+# v1.3.0 (2020 02-03)
+- Add fine-grained panning (OPLL_setPanFine).
+
 # v1.2.7 (2020 01-12)
 - Reactivate output array of carrier slot for backward compatibility.
 
