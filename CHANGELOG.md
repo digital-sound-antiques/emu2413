@@ -1,3 +1,7 @@
+# v1.4.0
+- Refactor API and internals.
+- Add OPLL_setChipType. OPLL_setChipMode is deprecated.
+
 # v1.3.0 (2020 02-03)
 - Add fine-grained panning (OPLL_setPanFine).
 

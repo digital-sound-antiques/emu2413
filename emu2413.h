@@ -9,13 +9,11 @@ extern "C" {
 
 #define OPLL_DEBUG 0
 
-typedef enum __OPLL_EG_STATE { ATTACK, DECAY, SUSTAIN, RELEASE, DAMP, UNKNOWN } OPLL_EG_STATE;
-
 enum OPLL_TONE_ENUM { OPLL_2413_TONE = 0, OPLL_VRC7_TONE = 1, OPLL_281B_TONE = 2 };
 
 /* voice data */
 typedef struct __OPLL_PATCH {
-  uint32_t TL, FB, EG, ML, AR, DR, SL, RR, KR, KL, AM, PM, WF;
+  uint32_t TL, FB, EG, ML, AR, DR, SL, RR, KR, KL, AM, PM, WS;
 } OPLL_PATCH;
 
 /* slot */
@@ -89,7 +87,7 @@ typedef struct __OPLL {
   uint32_t clk;
   uint32_t rate;
 
-  uint8_t chip_mode;
+  uint8_t chip_type;
 
   uint32_t adr;
 
@@ -118,7 +116,6 @@ typedef struct __OPLL {
   int32_t patch_number[9];
   OPLL_SLOT slot[18];
   OPLL_PATCH patch[19 * 2];
-  int32_t patch_update[2];
 
   uint8_t pan[16];
   float pan_fine[16][2];
@@ -138,7 +135,7 @@ OPLL *OPLL_new(uint32_t clk, uint32_t rate);
 void OPLL_delete(OPLL *);
 
 void OPLL_reset(OPLL *);
-void OPLL_resetPatch(OPLL *, int32_t);
+void OPLL_resetPatch(OPLL *, uint8_t);
 
 /** 
  * Set output wave sampling rate. 
@@ -165,25 +162,26 @@ void OPLL_setQuality(OPLL *opll, uint8_t q);
 void OPLL_setPan(OPLL *opll, uint32_t ch, uint8_t pan);
 
 /**
- * Fine-grained panning
+ * Set fine-grained panning
  * @param ch 0..8:tone 9:bd 10:hh 11:sd 12:tom 13:cym 14,15:reserved
- * @param pan output strength for left/right channel. 
- *            pan[0]: left strength, pan[1]: right strength. 
- *            by default, pan[0]=pan[1]=1.0f for center.
+ * @param pan output strength of left/right channel. 
+ *            pan[0]: left, pan[1]: right. pan[0]=pan[1]=1.0f for center.
  */
 void OPLL_setPanFine(OPLL *opll, uint32_t ch, float pan[2]);
 
 /**
- * Set chip mode. If vrc7 is selected, r#14 is ignored.
- * @param mode 0:ym2413 1:vrc7
+ * Set chip type. If vrc7 is selected, r#14 is ignored. 
+ * This method not change the current ROM patch set. 
+ * To change ROM patch set, use OPLL_resetPatch.
+ * @param type 0:YM2413 1:VRC7
  */
-void OPLL_setChipMode(OPLL *opll, uint8_t mode); 
+void OPLL_setChipType(OPLL *opll, uint8_t type); 
 
 void OPLL_writeIO(OPLL *opll, uint32_t reg, uint8_t val);
 void OPLL_writeReg(OPLL *opll, uint32_t reg, uint8_t val);
 
 /**
- * Calculate sample
+ * Calculate one sample
  */
 int16_t OPLL_calc(OPLL *opll);
 
@@ -231,6 +229,7 @@ uint32_t OPLL_toggleMask(OPLL *, uint32_t mask);
 #define OPLL_reset_patch OPLL_resetPatch
 #define OPLL_dump2patch OPLL_dumpToPatch
 #define OPLL_patch2dump OPLL_patchToDump
+#define OPLL_setChipMode OPLL_setChipType
 
 #ifdef __cplusplus
 }

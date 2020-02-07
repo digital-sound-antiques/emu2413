@@ -1,5 +1,5 @@
 /**
- * emu2413 v1.3.0
+ * emu2413 v1.4.0
  * https://github.com/digital-sound-antiques/emu2413
  * Copyright (C) 2020 Mitsutaka Okazaki
  *
@@ -117,11 +117,7 @@ static uint8_t default_inst[OPLL_TONE_NUM][(16 + 3) * 8] = {{
 /* damper speed before key-on. key-scale affects. */
 #define DAMPER_RATE 12
 
-#define TL2EG(d) ((d) << (EG_BITS - TL_BITS))
-#define SL2EG(d) ((d) << (EG_BITS - SL_BITS))
-
-/* envelope phase counter size */
-#define EG_DP_BITS 15
+#define TL2EG(d) ((d) << 1)
 
 /* sine table */
 #define PG_BITS 10 /* 2^10 = 1024 length sine table */
@@ -216,6 +212,8 @@ static uint8_t eg_step_tables[4][8] = {
     {0, 1, 1, 1, 0, 1, 1, 1},
     {0, 1, 1, 1, 1, 1, 1, 1},
 };
+
+enum __OPLL_EG_STATE { ATTACK, DECAY, SUSTAIN, RELEASE, DAMP, UNKNOWN };
 
 static uint32_t ml_table[16] = {1,     1 * 2, 2 * 2,  3 * 2,  4 * 2,  5 * 2,  6 * 2,  7 * 2,
                                 8 * 2, 9 * 2, 10 * 2, 10 * 2, 12 * 2, 12 * 2, 15 * 2, 15 * 2};
@@ -440,9 +438,9 @@ static void initializeTables() {
 #if OPLL_DEBUG
 static void _debug_print_patch(OPLL_SLOT *slot) {
   OPLL_PATCH *p = slot->patch;
-  printf("[slot#%d am:%d pm:%d eg:%d kr:%d ml:%d kl:%d tl:%d wf:%d fb:%d A:%d D:%d S:%d R:%d]\n", slot->number, //
+  printf("[slot#%d am:%d pm:%d eg:%d kr:%d ml:%d kl:%d tl:%d ws:%d fb:%d A:%d D:%d S:%d R:%d]\n", slot->number, //
          p->AM, p->PM, p->EG, p->KR, p->ML,                                                                     //
-         p->KL, p->TL, p->WF, p->FB,                                                                            //
+         p->KL, p->TL, p->WS, p->FB,                                                                            //
          p->AR, p->DR, p->SL, p->RR);
 }
 
@@ -496,7 +494,7 @@ static INLINE int get_parameter_rate(OPLL_SLOT *slot) {
 }
 
 enum SLOT_UPDATE_FLAG {
-  UPDATE_WF = 1,
+  UPDATE_WS = 1,
   UPDATE_TLL = 2,
   UPDATE_RKS = 4,
   UPDATE_EG = 8,
@@ -514,8 +512,8 @@ static void commit_slot_update(OPLL_SLOT *slot) {
   }
 #endif
 
-  if (slot->update_requests & UPDATE_WF) {
-    slot->wave_table = wave_table_map[slot->patch->WF];
+  if (slot->update_requests & UPDATE_WS) {
+    slot->wave_table = wave_table_map[slot->patch->WS];
   }
 
   if (slot->update_requests & UPDATE_TLL) {
@@ -901,7 +899,7 @@ static INLINE void calc_envelope(OPLL_SLOT *slot, OPLL_SLOT *buddy, uint16_t eg_
     break;
 
   case DECAY:
-    if ((slot->eg_out >> (EG_BITS - SL_BITS)) == slot->patch->SL) {
+    if ((slot->eg_out >> 3) == slot->patch->SL) {
       slot->eg_state = SUSTAIN;
       request_update(slot, UPDATE_EG);
     }
@@ -952,7 +950,7 @@ static INLINE int16_t to_linear(uint16_t h, OPLL_SLOT *slot, int16_t am) {
   if (slot->eg_out >= EG_MAX)
     return 0;
 
-  att = min(127, (slot->eg_out + slot->tll + am)) << 4;
+  att = min(EG_MAX, (slot->eg_out + slot->tll + am)) << 4;
   return lookup_exp_table(h + att);
 }
 
@@ -1141,8 +1139,8 @@ OPLL *OPLL_new(uint32_t clk, uint32_t rate) {
   opll->mix_out[1] = 0;
 
   OPLL_reset(opll);
-  OPLL_reset_patch(opll, 0);
-
+  OPLL_setChipType(opll, 0);
+  OPLL_resetPatch(opll, 0);
   return opll;
 }
 
@@ -1240,14 +1238,14 @@ void OPLL_setRate(OPLL *opll, uint32_t rate) {
 
 void OPLL_setQuality(OPLL *opll, uint8_t q) {}
 
-void OPLL_setChipMode(OPLL *opll, uint8_t mode) { opll->chip_mode = mode; }
+void OPLL_setChipType(OPLL *opll, uint8_t type) {
+  opll->chip_type = type;
+}
 
 void OPLL_writeReg(OPLL *opll, uint32_t reg, uint8_t data) {
-  int32_t ch;
-  int i;
+  int ch, i;
 
-  data = data & 0xff;
-  reg = reg & 0x3f;
+  if (reg >= 0x40) return;
 
   /* mirror registers */
   if ((0x19 <= reg && reg <= 0x1f) || (0x29 <= reg && reg <= 0x2f) || (0x39 <= reg && reg <= 0x3f)) {
@@ -1295,13 +1293,13 @@ void OPLL_writeReg(OPLL *opll, uint32_t reg, uint8_t data) {
 
   case 0x03:
     opll->patch[1].KL = (data >> 6) & 3;
-    opll->patch[1].WF = (data >> 4) & 1;
-    opll->patch[0].WF = (data >> 3) & 1;
+    opll->patch[1].WS = (data >> 4) & 1;
+    opll->patch[0].WS = (data >> 3) & 1;
     opll->patch[0].FB = (data)&7;
     for (i = 0; i < 9; i++) {
       if (opll->patch_number[i] == 0) {
-        request_update(MOD(opll, i), UPDATE_WF);
-        request_update(CAR(opll, i), UPDATE_WF | UPDATE_TLL);
+        request_update(MOD(opll, i), UPDATE_WS);
+        request_update(CAR(opll, i), UPDATE_WS | UPDATE_TLL);
       }
     }
     break;
@@ -1347,7 +1345,7 @@ void OPLL_writeReg(OPLL *opll, uint32_t reg, uint8_t data) {
     break;
 
   case 0x0e:
-    if (opll->chip_mode == 1)
+    if (opll->chip_type == 1)
       break;
     update_rhythm_mode(opll);
     update_key_status(opll);
@@ -1450,8 +1448,8 @@ void OPLL_dumpToPatch(const uint8_t *dump, OPLL_PATCH *patch) {
   patch[1].TL = 0;
   patch[0].FB = (dump[3]) & 7;
   patch[1].FB = 0;
-  patch[0].WF = (dump[3] >> 3) & 1;
-  patch[1].WF = (dump[3] >> 4) & 1;
+  patch[0].WS = (dump[3] >> 3) & 1;
+  patch[1].WS = (dump[3] >> 4) & 1;
   patch[0].AR = (dump[4] >> 4) & 15;
   patch[1].AR = (dump[5] >> 4) & 15;
   patch[0].DR = (dump[4]) & 15;
@@ -1480,7 +1478,7 @@ void OPLL_patchToDump(const OPLL_PATCH *patch, uint8_t *dump) {
   dump[0] = (uint8_t)((patch[0].AM << 7) + (patch[0].PM << 6) + (patch[0].EG << 5) + (patch[0].KR << 4) + patch[0].ML);
   dump[1] = (uint8_t)((patch[1].AM << 7) + (patch[1].PM << 6) + (patch[1].EG << 5) + (patch[1].KR << 4) + patch[1].ML);
   dump[2] = (uint8_t)((patch[0].KL << 6) + patch[0].TL);
-  dump[3] = (uint8_t)((patch[1].KL << 6) + (patch[1].WF << 4) + (patch[0].WF << 3) + patch[0].FB);
+  dump[3] = (uint8_t)((patch[1].KL << 6) + (patch[1].WS << 4) + (patch[0].WS << 3) + patch[0].FB);
   dump[4] = (uint8_t)((patch[0].AR << 4) + patch[0].DR);
   dump[5] = (uint8_t)((patch[1].AR << 4) + patch[1].DR);
   dump[6] = (uint8_t)((patch[0].SL << 4) + patch[0].RR);
@@ -1491,7 +1489,7 @@ void OPLL_copyPatch(OPLL *opll, int32_t num, OPLL_PATCH *patch) {
   memcpy(&opll->patch[num], patch, sizeof(OPLL_PATCH));
 }
 
-void OPLL_resetPatch(OPLL *opll, int32_t type) {
+void OPLL_resetPatch(OPLL *opll, uint8_t type) {
   int i;
   for (i = 0; i < 19 * 2; i++)
     OPLL_copyPatch(opll, i, &default_patch[type % OPLL_TONE_NUM][i]);
