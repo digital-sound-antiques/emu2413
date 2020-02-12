@@ -252,9 +252,6 @@ static OPLL_PATCH default_patch[OPLL_TONE_NUM][(16 + 3) * 2];
 #define SINC_RESO 256
 #define SINC_AMP_BITS 12
 
-/* fast conversion: 3-point average filter is used instead of sinc(x) table. rough and fast.*/
-#define USE_FAST_RATE_CONV 0
-
 // double hamming(double x) { return 0.54 - 0.46 * cos(2 * PI * x); }
 static double blackman(double x) { return 0.42 - 0.5 * cos(2 * _PI_ * x) + 0.08 * cos(4 * _PI_ * x); }
 static double sinc(double x) { return (x == 0.0 ? 1.0 : sin(_PI_ * x) / (_PI_ * x)); }
@@ -735,11 +732,14 @@ static void update_ampm(OPLL *opll) {
   opll->lfo_am = am_table[(opll->am_phase >> 6) % sizeof(am_table)];
 }
 
-static void update_noise(OPLL *opll) {
-  if (opll->noise_seed & 1)
-    opll->noise_seed ^= 0x8003020;
-  opll->noise_seed >>= 1;
-  opll->noise = opll->noise_seed & 1;
+static void update_noise(OPLL *opll, int cycle) {
+  int i;
+  for (i = 0; i < cycle; i++) {
+    if (opll->noise & 1) {
+      opll->noise ^= 0x800200;
+    }
+    opll->noise >>= 1;
+  }
 }
 
 static void update_short_noise(OPLL *opll) {
@@ -951,9 +951,9 @@ static INLINE int16_t calc_slot_snare(OPLL *opll) {
   uint32_t phase;
 
   if (BIT(slot->pg_out, PG_BITS - 2))
-    phase = opll->noise ? _PD(0x300) : _PD(0x200);
+    phase = (opll->noise & 1) ? _PD(0x300) : _PD(0x200);
   else
-    phase = opll->noise ? _PD(0x0) : _PD(0x100);
+    phase = (opll->noise & 1) ? _PD(0x0) : _PD(0x100);
 
   return to_linear(slot->wave_table[phase], slot, 0);
 }
@@ -972,9 +972,9 @@ static INLINE int16_t calc_slot_hat(OPLL *opll) {
   uint32_t phase;
 
   if (opll->short_noise)
-    phase = opll->noise ? _PD(0x2d0) : _PD(0x234);
+    phase = (opll->noise & 1) ? _PD(0x2d0) : _PD(0x234);
   else
-    phase = opll->noise ? _PD(0x34) : _PD(0xd0);
+    phase = (opll->noise & 1) ? _PD(0x34) : _PD(0xd0);
 
   return to_linear(slot->wave_table[phase], slot, 0);
 }
@@ -987,7 +987,6 @@ static void update_output(OPLL *opll) {
   int i;
 
   update_ampm(opll);
-  update_noise(opll);
   update_short_noise(opll);
   update_slots(opll);
 
@@ -1010,6 +1009,7 @@ static void update_output(OPLL *opll) {
       out[9] = _RO(calc_slot_car(opll, 6, calc_slot_mod(opll, 6)));
     }
   }
+  update_noise(opll, 14);
 
   /* CH8 */
   if (!opll->rhythm_mode) {
@@ -1024,6 +1024,7 @@ static void update_output(OPLL *opll) {
       out[11] = _RO(calc_slot_snare(opll));
     }
   }
+  update_noise(opll, 2);
 
   /* CH9 */
   if (!opll->rhythm_mode) {
@@ -1038,6 +1039,7 @@ static void update_output(OPLL *opll) {
       out[13] = _RO(calc_slot_cym(opll));
     }
   }
+  update_noise(opll, 2);
 }
 
 INLINE static void mix_output(OPLL *opll) {
@@ -1144,7 +1146,7 @@ void OPLL_reset(OPLL *opll) {
   opll->pm_phase = 0;
   opll->am_phase = 0;
 
-  opll->noise_seed = 0xffff;
+  opll->noise = 0x1;
   opll->mask = 0;
 
   opll->rhythm_mode = 0;
@@ -1197,14 +1199,13 @@ void OPLL_setRate(OPLL *opll, uint32_t rate) {
 
 void OPLL_setQuality(OPLL *opll, uint8_t q) {}
 
-void OPLL_setChipType(OPLL *opll, uint8_t type) {
-  opll->chip_type = type;
-}
+void OPLL_setChipType(OPLL *opll, uint8_t type) { opll->chip_type = type; }
 
 void OPLL_writeReg(OPLL *opll, uint32_t reg, uint8_t data) {
   int ch, i;
 
-  if (reg >= 0x40) return;
+  if (reg >= 0x40)
+    return;
 
   /* mirror registers */
   if ((0x19 <= reg && reg <= 0x1f) || (0x29 <= reg && reg <= 0x2f) || (0x39 <= reg && reg <= 0x3f)) {
