@@ -346,9 +346,6 @@ void OPLL_RateConv_delete(OPLL_RateConv *conv) {
 
 static void makeSinTable(void) {
   int x;
-  // for (x = 0; x < PG_WIDTH / 4; x++) {
-  //   fullsin_table[x] = (uint16_t)round(-log2(sin((x + 0.5) * PI / (PG_WIDTH / 4) / 2)) * 256);
-  // }
 
   for (x = 0; x < PG_WIDTH / 4; x++) {
     fullsin_table[PG_WIDTH / 4 + x] = fullsin_table[PG_WIDTH / 4 - x - 1];
@@ -468,6 +465,11 @@ static INLINE void _debug_print_slot_info(OPLL_SLOT *slot) {
 #endif
 
 static INLINE int get_parameter_rate(OPLL_SLOT *slot) {
+
+  if ((slot->type & 1) == 0 && slot->key_flag == 0) {
+    return 0;
+  }
+
   switch (slot->eg_state) {
   case ATTACK:
     return slot->patch->AR;
@@ -559,6 +561,7 @@ static void reset_slot(OPLL_SLOT *slot, int number) {
   slot->eg_shift = 0;
   slot->rks = 0;
   slot->tll = 0;
+  slot->key_flag = 0;
   slot->sus_flag = 0;
   slot->blk_fnum = 0;
   slot->blk = 0;
@@ -571,12 +574,14 @@ static void reset_slot(OPLL_SLOT *slot, int number) {
 
 static INLINE void slotOn(OPLL *opll, int i) {
   OPLL_SLOT *slot = &opll->slot[i];
+  slot->key_flag = 1;
   slot->eg_state = DAMP;
   request_update(slot, UPDATE_EG);
 }
 
 static INLINE void slotOff(OPLL *opll, int i) {
   OPLL_SLOT *slot = &opll->slot[i];
+  slot->key_flag = 0;
   if (slot->type & 1) {
     slot->eg_state = RELEASE;
     request_update(slot, UPDATE_EG);
@@ -810,9 +815,6 @@ static INLINE void start_envelope(OPLL_SLOT *slot) {
     slot->eg_state = ATTACK;
     slot->eg_out = EG_MUTE;
   }
-  if (!slot->pg_keep) {
-    slot->pg_phase = 0;
-  }
   request_update(slot, UPDATE_EG);
 }
 
@@ -838,8 +840,13 @@ static INLINE void calc_envelope(OPLL_SLOT *slot, OPLL_SLOT *buddy, uint16_t eg_
   case DAMP:
     if (slot->eg_out >= EG_MUTE) {
       start_envelope(slot);
-      if (buddy && !buddy->pg_keep) {
-        buddy->pg_phase = 0;
+      if (slot->type & 1) {
+        if (!slot->pg_keep) {
+          slot->pg_phase = 0;
+        }
+        if (buddy && !buddy->pg_keep) {
+          buddy->pg_phase = 0;
+        }
       }
     }
     break;

@@ -44,6 +44,7 @@ typedef struct __OPLL_SLOT {
   /* envelope generator (eg) */
   uint8_t eg_state;  /* current state */
   int32_t volume;    /* current volume */
+  uint8_t key_flag;  /* key-on flag 1:on 0:off */
   uint8_t sus_flag;  /* key-sus option 1:on 0:off */
   uint16_t tll;      /* total level + key scale level*/
   uint8_t rks;       /* key scale offset (rks) for eg speed */
