@@ -1,4 +1,4 @@
-# v1.4.1 (2020 02-09)
+# v1.4.1 (2020 02-12)
 - Remove deferred rhythm mode switching.
 - Improve white noise emulation.
 

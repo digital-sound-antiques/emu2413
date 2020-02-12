@@ -636,11 +636,6 @@ static INLINE void set_patch(OPLL *opll, int32_t ch, int32_t num) {
   request_update(CAR(opll, ch), UPDATE_ALL);
 }
 
-static INLINE void set_slot_patch(OPLL_SLOT *slot, OPLL_PATCH *patch) {
-  slot->patch = patch;
-  request_update(slot, UPDATE_ALL);
-}
-
 static INLINE void set_sus_flag(OPLL *opll, int ch, int flag) {
   CAR(opll, ch)->sus_flag = flag;
   request_update(CAR(opll, ch), UPDATE_EG);
@@ -687,7 +682,6 @@ static INLINE void set_block(OPLL *opll, int ch, int blk) {
 
 static INLINE void update_rhythm_mode(OPLL *opll) {
   const uint8_t new_rhythm_mode = (opll->reg[0x0e] >> 5) & 1;
-  const uint32_t slot_key_status = opll->slot_key_status;
 
   if (opll->rhythm_mode != new_rhythm_mode) {
 
