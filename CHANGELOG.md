@@ -1,4 +1,8 @@
-# v1.4.0
+# v1.4.1 (2020 02-09)
+- Remove deferred rhythm mode switching.
+- Improve white noise emulation.
+
+# v1.4.0 (2020 02-08)
 - Refactor API and internals.
 - Add OPLL_setChipType. OPLL_setChipMode is deprecated.
 

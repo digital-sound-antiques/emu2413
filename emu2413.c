@@ -1,5 +1,5 @@
 /**
- * emu2413 v1.4.0
+ * emu2413 v1.4.1
  * https://github.com/digital-sound-antiques/emu2413
  * Copyright (C) 2020 Mitsutaka Okazaki
  *
@@ -828,7 +828,7 @@ static INLINE void calc_envelope(OPLL_SLOT *slot, OPLL_SLOT *buddy, uint16_t eg_
   uint8_t s;
 
   if (slot->eg_state == ATTACK) {
-    if (0 < slot->eg_out && slot->eg_rate_h > 0 && (eg_counter & mask & ~3) == 0) {
+    if (0 < slot->eg_out && 0 < slot->eg_rate_h && (eg_counter & mask & ~3) == 0) {
       s = lookup_attack_step(slot, eg_counter);
       if (0 < s) {
         slot->eg_out = max(0, ((int)slot->eg_out - (slot->eg_out >> s) - 1));
@@ -842,7 +842,7 @@ static INLINE void calc_envelope(OPLL_SLOT *slot, OPLL_SLOT *buddy, uint16_t eg_
 
   switch (slot->eg_state) {
   case DAMP:
-    if (slot->eg_out >= EG_MAX) {
+    if (slot->eg_out >= EG_MUTE) {
       start_envelope(slot);
       if (buddy && !buddy->pg_keep) {
         buddy->pg_phase = 0;
