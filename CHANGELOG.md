@@ -1,4 +1,7 @@
-# v1.4.1 (2020 02-12)
+# v1.5.0 (2020 02-12)
+- Fix the modulator decay rate of the acoustic bass patch.
+- Fix the modulator's key-off release rate.
+- Do not reset carrier's phase when modulator DP finishes.
 - Remove deferred rhythm mode switching.
 - Improve white noise emulation.
 
