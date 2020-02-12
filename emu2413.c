@@ -692,72 +692,31 @@ static INLINE void update_rhythm_mode(OPLL *opll) {
   const uint8_t new_rhythm_mode = (opll->reg[0x0e] >> 5) & 1;
   const uint32_t slot_key_status = opll->slot_key_status;
 
-  if (opll->patch_number[6] & 0x10) {
-    if (!(BIT(slot_key_status, SLOT_BD2) | new_rhythm_mode)) {
-      opll->slot[SLOT_BD1].eg_state = RELEASE;
-      opll->slot[SLOT_BD1].eg_out = EG_MUTE;
-      opll->slot[SLOT_BD2].eg_state = RELEASE;
-      opll->slot[SLOT_BD2].eg_out = EG_MUTE;
-      set_patch(opll, 6, opll->reg[0x36] >> 4);
-    }
-  } else if (new_rhythm_mode) {
-    opll->patch_number[6] = 16;
-    opll->slot[SLOT_BD1].eg_state = RELEASE;
-    opll->slot[SLOT_BD1].eg_out = EG_MUTE;
-    opll->slot[SLOT_BD2].eg_state = RELEASE;
-    opll->slot[SLOT_BD2].eg_out = EG_MUTE;
-    set_slot_patch(&opll->slot[SLOT_BD1], &opll->patch[16 * 2 + 0]);
-    set_slot_patch(&opll->slot[SLOT_BD2], &opll->patch[16 * 2 + 1]);
-  }
+  if (opll->rhythm_mode != new_rhythm_mode) {
 
-  if (opll->patch_number[7] & 0x10) {
-    if (!((BIT(slot_key_status, SLOT_HH) && BIT(slot_key_status, SLOT_SD)) | new_rhythm_mode)) {
+    if (new_rhythm_mode) {
+      opll->slot[SLOT_HH].type = 3;
+      opll->slot[SLOT_HH].pg_keep = 1;
+      opll->slot[SLOT_SD].type = 3;
+      opll->slot[SLOT_TOM].type = 3;
+      opll->slot[SLOT_CYM].type = 3;
+      opll->slot[SLOT_CYM].pg_keep = 1;
+      set_patch(opll, 6, 16);
+      set_patch(opll, 7, 17);
+      set_patch(opll, 8, 18);
+      set_slot_volume(&opll->slot[SLOT_HH], ((opll->reg[0x37] >> 4) & 15) << 2);
+      set_slot_volume(&opll->slot[SLOT_TOM], ((opll->reg[0x38] >> 4) & 15) << 2);
+    } else {
       opll->slot[SLOT_HH].type = 0;
       opll->slot[SLOT_HH].pg_keep = 0;
-      opll->slot[SLOT_HH].eg_state = RELEASE;
-      opll->slot[SLOT_HH].eg_out = EG_MUTE;
       opll->slot[SLOT_SD].type = 1;
-      opll->slot[SLOT_SD].eg_state = RELEASE;
-      opll->slot[SLOT_SD].eg_out = EG_MUTE;
-      set_patch(opll, 7, opll->reg[0x37] >> 4);
-    }
-  } else if (new_rhythm_mode) {
-    opll->patch_number[7] = 17;
-    opll->slot[SLOT_HH].type = 3;
-    opll->slot[SLOT_HH].pg_keep = 1;
-    opll->slot[SLOT_HH].eg_state = RELEASE;
-    opll->slot[SLOT_HH].eg_out = EG_MUTE;
-    opll->slot[SLOT_SD].type = 3;
-    opll->slot[SLOT_SD].eg_state = RELEASE;
-    opll->slot[SLOT_SD].eg_out = EG_MUTE;
-    set_slot_patch(&opll->slot[SLOT_HH], &opll->patch[17 * 2 + 0]);
-    set_slot_patch(&opll->slot[SLOT_SD], &opll->patch[17 * 2 + 1]);
-    set_slot_volume(&opll->slot[SLOT_HH], ((opll->reg[0x37] >> 4) & 15) << 2);
-  }
-
-  if (opll->patch_number[8] & 0x10) {
-    if (!((BIT(slot_key_status, SLOT_CYM) && BIT(slot_key_status, SLOT_TOM)) | new_rhythm_mode)) {
       opll->slot[SLOT_TOM].type = 0;
-      opll->slot[SLOT_TOM].eg_state = RELEASE;
-      opll->slot[SLOT_TOM].eg_out = EG_MUTE;
       opll->slot[SLOT_CYM].type = 1;
       opll->slot[SLOT_CYM].pg_keep = 0;
-      opll->slot[SLOT_CYM].eg_state = RELEASE;
-      opll->slot[SLOT_CYM].eg_out = EG_MUTE;
+      set_patch(opll, 6, opll->reg[0x36] >> 4);
+      set_patch(opll, 7, opll->reg[0x37] >> 4);
       set_patch(opll, 8, opll->reg[0x38] >> 4);
     }
-  } else if (new_rhythm_mode) {
-    opll->patch_number[8] = 18;
-    opll->slot[SLOT_TOM].type = 3;
-    opll->slot[SLOT_TOM].eg_state = RELEASE;
-    opll->slot[SLOT_TOM].eg_out = EG_MUTE;
-    opll->slot[SLOT_CYM].type = 3;
-    opll->slot[SLOT_CYM].pg_keep = 1;
-    opll->slot[SLOT_CYM].eg_state = RELEASE;
-    opll->slot[SLOT_CYM].eg_out = EG_MUTE;
-    set_slot_patch(&opll->slot[SLOT_TOM], &opll->patch[18 * 2 + 0]);
-    set_slot_patch(&opll->slot[SLOT_CYM], &opll->patch[18 * 2 + 1]);
-    set_slot_volume(&opll->slot[SLOT_TOM], ((opll->reg[0x38] >> 4) & 15) << 2);
   }
 
   opll->rhythm_mode = new_rhythm_mode;
@@ -1042,7 +1001,7 @@ static void update_output(OPLL *opll) {
   }
 
   /* CH7 */
-  if (opll->patch_number[6] <= 15) {
+  if (!opll->rhythm_mode) {
     if (!(opll->mask & OPLL_MASK_CH(6))) {
       out[6] = _MO(calc_slot_car(opll, 6, calc_slot_mod(opll, 6)));
     }
@@ -1053,7 +1012,7 @@ static void update_output(OPLL *opll) {
   }
 
   /* CH8 */
-  if (opll->patch_number[7] <= 15) {
+  if (!opll->rhythm_mode) {
     if (!(opll->mask & OPLL_MASK_CH(7))) {
       out[7] = _MO(calc_slot_car(opll, 7, calc_slot_mod(opll, 7)));
     }
@@ -1067,7 +1026,7 @@ static void update_output(OPLL *opll) {
   }
 
   /* CH9 */
-  if (opll->patch_number[8] <= 15) {
+  if (!opll->rhythm_mode) {
     if (!(opll->mask & OPLL_MASK_CH(8))) {
       out[8] = _MO(calc_slot_car(opll, 8, calc_slot_mod(opll, 8)));
     }
@@ -1382,8 +1341,6 @@ void OPLL_writeReg(OPLL *opll, uint32_t reg, uint8_t data) {
     set_block(opll, ch, (data >> 1) & 7);
     set_sus_flag(opll, ch, (data >> 5) & 1);
     update_key_status(opll);
-    /* update rhythm mode here because key-off of rhythm instrument is deferred until key-on bit is down. */
-    update_rhythm_mode(opll);
     break;
 
   case 0x30:
