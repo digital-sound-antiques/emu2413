@@ -1,3 +1,6 @@
+# v1.5.1 (2020 02-18)
+- Fix piano attack rate.
+
 # v1.5.0 (2020 02-12)
 - Fix the modulator decay rate of the acoustic bass patch.
 - Fix the modulator's key-off release rate.
