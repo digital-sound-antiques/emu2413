@@ -1,3 +1,7 @@
+# v1.5.2 (2020 03-04)
+- Fix unused constants and variables.
+- Fix comments.
+
 # v1.5.1 (2020 02-18)
 - Fix piano attack rate.
 

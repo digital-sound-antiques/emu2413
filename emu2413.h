@@ -104,10 +104,8 @@ typedef struct __OPLL {
   uint32_t eg_counter;
 
   uint32_t pm_phase;
-  uint32_t pm_dphase;
-
   int32_t am_phase;
-  int32_t am_dphase;
+
   uint8_t lfo_am;
 
   uint32_t noise;

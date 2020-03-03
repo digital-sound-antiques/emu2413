@@ -1,5 +1,5 @@
 /**
- * emu2413 v1.5.1
+ * emu2413 v1.5.2
  * https://github.com/digital-sound-antiques/emu2413
  * Copyright (C) 2020 Mitsutaka Okazaki
  *
@@ -168,21 +168,16 @@ static uint16_t halfsin_table[PG_WIDTH];
 static uint16_t *wave_table_map[2] = {fullsin_table, halfsin_table};
 
 /* pitch modulator */
-#define PM_PG_BITS 3
-#define PM_PG_WIDTH (1 << PM_PG_BITS)
-#define PM_DP_BITS 22
-#define PM_DP_WIDTH (1 << PM_DP_BITS)
-
 /* offset to fnum, rough approximation of 14 cents depth. */
-static int8_t pm_table[8][PM_PG_WIDTH] = {
-    {0, 0, 0, 0, 0, 0, 0, 0},    // fnum = 000xxxxx
-    {0, 0, 1, 0, 0, 0, -1, 0},   // fnum = 001xxxxx
-    {0, 1, 2, 1, 0, -1, -2, -1}, // fnum = 010xxxxx
-    {0, 1, 3, 1, 0, -1, -3, -1}, // fnum = 011xxxxx
-    {0, 2, 4, 2, 0, -2, -4, -2}, // fnum = 100xxxxx
-    {0, 2, 5, 2, 0, -2, -5, -2}, // fnum = 101xxxxx
-    {0, 3, 6, 3, 0, -3, -6, -3}, // fnum = 110xxxxx
-    {0, 3, 7, 3, 0, -3, -7, -3}, // fnum = 111xxxxx
+static int8_t pm_table[8][8] = {
+    {0, 0, 0, 0, 0, 0, 0, 0},    // fnum = 000xxxxxx
+    {0, 0, 1, 0, 0, 0, -1, 0},   // fnum = 001xxxxxx
+    {0, 1, 2, 1, 0, -1, -2, -1}, // fnum = 010xxxxxx
+    {0, 1, 3, 1, 0, -1, -3, -1}, // fnum = 011xxxxxx
+    {0, 2, 4, 2, 0, -2, -4, -2}, // fnum = 100xxxxxx
+    {0, 2, 5, 2, 0, -2, -5, -2}, // fnum = 101xxxxxx
+    {0, 3, 6, 3, 0, -3, -6, -3}, // fnum = 110xxxxxx
+    {0, 3, 7, 3, 0, -3, -7, -3}, // fnum = 111xxxxxx
 };
 
 /* amplitude lfo table */
@@ -719,14 +714,12 @@ static INLINE void update_rhythm_mode(OPLL *opll) {
 }
 
 static void update_ampm(OPLL *opll) {
-  const uint32_t pm_inc = (opll->test_flag & 8) ? opll->pm_dphase << 10 : opll->pm_dphase;
-  const uint32_t am_inc = (opll->test_flag & 8) ? 64 : 1;
   if (opll->test_flag & 2) {
     opll->pm_phase = 0;
     opll->am_phase = 0;
   } else {
-    opll->pm_phase = (opll->pm_phase + pm_inc) & (PM_DP_WIDTH - 1);
-    opll->am_phase += am_inc;
+    opll->pm_phase += (opll->test_flag & 8) ? 1024 : 1;
+    opll->am_phase += (opll->test_flag & 8) ? 64 : 1;
   }
   opll->lfo_am = am_table[(opll->am_phase >> 6) % sizeof(am_table)];
 }
@@ -756,7 +749,7 @@ static void update_short_noise(OPLL *opll) {
 }
 
 static INLINE void calc_phase(OPLL_SLOT *slot, int32_t pm_phase, uint8_t reset) {
-  const int8_t pm = slot->patch->PM ? pm_table[(slot->fnum >> 6) & 7][pm_phase >> (PM_DP_BITS - PM_PG_BITS)] : 0;
+  const int8_t pm = slot->patch->PM ? pm_table[(slot->fnum >> 6) & 7][(pm_phase >> 10) & 7] : 0;
   if (reset) {
     slot->pg_phase = 0;
   }
@@ -1165,8 +1158,6 @@ void OPLL_reset(OPLL *opll) {
 
   for (i = 0; i < 0x40; i++)
     OPLL_writeReg(opll, i, 0);
-
-  opll->pm_dphase = PM_DP_WIDTH / (1024 * 8);
 
   for (i = 0; i < 15; i++) {
     opll->pan[i] = 3;
