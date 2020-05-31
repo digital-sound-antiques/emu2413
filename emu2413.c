@@ -892,7 +892,7 @@ static void update_slots(OPLL *opll) {
 
 /* output: -4095...4095 */
 static INLINE int16_t lookup_exp_table(uint16_t i) {
-  /* from andete's expressoin */
+  /* from andete's expression */
   int16_t t = (exp_table[(i & 0xff) ^ 0xff] + 1024);
   int16_t res = t >> ((i & 0x7f00) >> 8);
   return ((i & 0x8000) ? ~res : res) << 1;
