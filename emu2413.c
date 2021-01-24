@@ -833,6 +833,9 @@ static INLINE void calc_envelope(OPLL_SLOT *slot, OPLL_SLOT *buddy, uint16_t eg_
   case DAMP:
     if (slot->eg_out >= EG_MUTE) {
       start_envelope(slot);
+      if (buddy) {
+        start_envelope(buddy);
+      }
       if (slot->type & 1) {
         if (!slot->pg_keep) {
           slot->pg_phase = 0;
