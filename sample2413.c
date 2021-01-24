@@ -47,7 +47,7 @@ int main(void) {
   static char wave[DATALENGTH * 2];
   char filename[16] = "temp.wav";
   char header[46];
-  int i;
+  int i, note_st;
   clock_t start, finish;
 
   FILE *fp;
@@ -72,16 +72,31 @@ int main(void) {
 
   opll = OPLL_new(MSX_CLK, SAMPLERATE);
   OPLL_reset(opll);
-  OPLL_writeReg(opll, 0x30, 0x30); /* select PIANO Voice to ch1. */
-  OPLL_writeReg(opll, 0x10, 0x80); /* set F-Number(L). */
-  OPLL_writeReg(opll, 0x20, 0x15); /* set BLK & F-Number(H) and
-                                    * keyon. */
 
   start = clock();
 
   i = 0;
 
+  #define N_ON_OFF 40
+  note_st = 0;
   for (i = 0; i < DATALENGTH; i++) {
+    if(i % (DATALENGTH / N_ON_OFF) == 0) {
+      if(note_st) {
+        OPLL_writeReg(opll, 0x21, 0);
+
+        OPLL_writeReg(opll, 0x30, 0x30);
+        OPLL_writeReg(opll, 0x10, 0x40);
+        OPLL_writeReg(opll, 0x20, 0x15);
+      } else {
+        OPLL_writeReg(opll, 0x20, 0);
+        
+        OPLL_writeReg(opll, 0x31, 0x30);
+        OPLL_writeReg(opll, 0x11, 0xF0);
+        OPLL_writeReg(opll, 0x21, 0x15);
+      }
+      note_st = !note_st;
+    }
+
     WORD(wave + i * 2, OPLL_calc(opll));
   }
 
