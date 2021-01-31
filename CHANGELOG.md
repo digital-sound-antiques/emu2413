@@ -1,3 +1,6 @@
+# v1.5.3 (2021 01-31)
+- Change min/max macros to inline functions.
+
 # v1.5.2 (2020 03-04)
 - Fix unused constants and variables.
 - Fix comments.
