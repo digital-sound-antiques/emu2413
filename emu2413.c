@@ -1114,7 +1114,7 @@ void OPLL_delete(OPLL *opll) {
 
 static void reset_rate_conversion_params(OPLL *opll) {
   const double f_out = opll->rate;
-  const double f_inp = opll->clk / 72;
+  const double f_inp = opll->clk / 72.0;
 
   opll->out_time = 0;
   opll->out_step = ((uint32_t)f_inp) << 8;
@@ -1416,14 +1416,14 @@ void OPLL_dumpToPatch(const uint8_t *dump, OPLL_PATCH *patch) {
 }
 
 void OPLL_getDefaultPatch(int32_t type, int32_t num, OPLL_PATCH *patch) {
-  OPLL_dump2patch(default_inst[type] + num * 8, patch);
+  OPLL_dumpToPatch(default_inst[type] + num * 8, patch);
 }
 
 void OPLL_setPatch(OPLL *opll, const uint8_t *dump) {
   OPLL_PATCH patch[2];
   int i;
   for (i = 0; i < 19; i++) {
-    OPLL_dump2patch(dump + i * 8, patch);
+    OPLL_dumpToPatchatch(dump + i * 8, patch);
     memcpy(&opll->patch[i * 2 + 0], &patch[0], sizeof(OPLL_PATCH));
     memcpy(&opll->patch[i * 2 + 1], &patch[1], sizeof(OPLL_PATCH));
   }
