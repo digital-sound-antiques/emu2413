@@ -1117,8 +1117,8 @@ static void reset_rate_conversion_params(OPLL *opll) {
   const double f_inp = opll->clk / 72.0;
 
   opll->out_time = 0;
-  opll->out_step = ((uint32_t)f_inp) << 8;
-  opll->inp_step = ((uint32_t)f_out) << 8;
+  opll->out_step = f_inp;
+  opll->inp_step = f_out;
 
   if (opll->conv) {
     OPLL_RateConv_delete(opll->conv);

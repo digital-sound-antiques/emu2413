@@ -1,5 +1,8 @@
-# v1.5.4 (2021 02-04)
-- Fix the problem where the internal sample rate is calculated as int insteadof double.
+# v1.5.5 (2021-02-05)
+- Fix the problem where the output sound is broken due to the mixing of integer and floating point types in the process of rate conversion calculation (degraded at v1.5.4).
+
+# <s>v1.5.4 (2021 02-04)</s>
+- Fix the problem where the internal sample rate is calculated as int instead of double.
 - Replace older "OPLL_dump2patch" to "OPLL_dumpToPatch".
 
 # v1.5.3 (2021 01-31)
