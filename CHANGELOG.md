@@ -1,3 +1,7 @@
+# v1.5.4 (2021 02-04)
+- Fix the problem where the internal sample rate is calculated as int insteadof double.
+- Replace older "OPLL_dump2patch" to "OPLL_dumpToPatch".
+
 # v1.5.3 (2021 01-31)
 - Change min/max macros to inline functions to suppress compiler errors/warnings.
  
