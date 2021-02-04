@@ -1423,7 +1423,7 @@ void OPLL_setPatch(OPLL *opll, const uint8_t *dump) {
   OPLL_PATCH patch[2];
   int i;
   for (i = 0; i < 19; i++) {
-    OPLL_dumpToPatchatch(dump + i * 8, patch);
+    OPLL_dumpToPatch(dump + i * 8, patch);
     memcpy(&opll->patch[i * 2 + 0], &patch[0], sizeof(OPLL_PATCH));
     memcpy(&opll->patch[i * 2 + 1], &patch[1], sizeof(OPLL_PATCH));
   }
