@@ -1,3 +1,6 @@
+# v1.5.6 (2021-02-28)
+- Update YMF281 ROM patches.
+
 # v1.5.5 (2021-02-05)
 - Fix the problem where the output sound is broken due to the mixing of integer and floating point types in the process of rate conversion calculation (degraded at v1.5.4).
 
