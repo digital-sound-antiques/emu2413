@@ -1,5 +1,5 @@
 /**
- * emu2413 v1.5.6
+ * emu2413 v1.5.7
  * https://github.com/digital-sound-antiques/emu2413
  * Copyright (C) 2020 Mitsutaka Okazaki
  *
@@ -224,13 +224,17 @@ static int32_t rks_table[8 * 2][2];
 static OPLL_PATCH null_patch = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 static OPLL_PATCH default_patch[OPLL_TONE_NUM][(16 + 3) * 2];
 
+/* don't forget min/max is defined as a macro in stdlib.h of Visual C. */
+#ifndef min
 static INLINE int min(int i, int j) {
   return (i < j) ? i : j;
 }
-
+#endif
+#ifndef max
 static INLINE int max(int i, int j) {
   return (i > j) ? i : j;
 }
+#endif
 
 /***************************************************
 
