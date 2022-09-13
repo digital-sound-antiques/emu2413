@@ -399,7 +399,7 @@ static void makeRksTable(void) {
     }
 }
 
-static void makeDefaultPatch() {
+static void makeDefaultPatch(void) {
   int i, j;
   for (i = 0; i < OPLL_TONE_NUM; i++)
     for (j = 0; j < 19; j++)
@@ -408,7 +408,7 @@ static void makeDefaultPatch() {
 
 static uint8_t table_initialized = 0;
 
-static void initializeTables() {
+static void initializeTables(void) {
   makeTllTable();
   makeRksTable();
   makeSinTable();
