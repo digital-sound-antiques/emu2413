@@ -1,3 +1,8 @@
+# v1.5.7 (2022-09-14)
+- Silence some pedantic warnings.
+- Update minimum cmake version to 3.0.
+- Fix the problem where min/max function conflict with the Visual C++ macros.
+
 # v1.5.6 (2021-02-28)
 - Update YMF281 ROM patches.
 
