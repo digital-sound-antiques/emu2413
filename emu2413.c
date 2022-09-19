@@ -1,5 +1,5 @@
 /**
- * emu2413 v1.5.7
+ * emu2413 v1.5.8
  * https://github.com/digital-sound-antiques/emu2413
  * Copyright (C) 2020 Mitsutaka Okazaki
  *
@@ -104,7 +104,7 @@ static uint8_t default_inst[OPLL_TONE_NUM][(16 + 3) * 8] = {{
 #define EG_STEP 0.375
 #define EG_BITS 7
 #define EG_MUTE ((1 << EG_BITS) - 1)
-#define EG_MAX (EG_MUTE - 3)
+#define EG_MAX (EG_MUTE - 4)
 
 /* dynamic range of total level */
 #define TL_STEP 0.75
@@ -226,14 +226,10 @@ static OPLL_PATCH default_patch[OPLL_TONE_NUM][(16 + 3) * 2];
 
 /* don't forget min/max is defined as a macro in stdlib.h of Visual C. */
 #ifndef min
-static INLINE int min(int i, int j) {
-  return (i < j) ? i : j;
-}
+static INLINE int min(int i, int j) { return (i < j) ? i : j; }
 #endif
 #ifndef max
-static INLINE int max(int i, int j) {
-  return (i > j) ? i : j;
-}
+static INLINE int max(int i, int j) { return (i > j) ? i : j; }
 #endif
 
 /***************************************************
@@ -815,7 +811,6 @@ static INLINE void start_envelope(OPLL_SLOT *slot) {
     slot->eg_out = 0;
   } else {
     slot->eg_state = ATTACK;
-    slot->eg_out = EG_MUTE;
   }
   request_update(slot, UPDATE_EG);
 }
@@ -840,7 +835,7 @@ static INLINE void calc_envelope(OPLL_SLOT *slot, OPLL_SLOT *buddy, uint16_t eg_
 
   switch (slot->eg_state) {
   case DAMP:
-    if (slot->eg_out >= EG_MUTE) {
+    if (slot->eg_out >= EG_MAX) {
       start_envelope(slot);
       if (slot->type & 1) {
         if (!slot->pg_keep) {
@@ -909,10 +904,10 @@ static INLINE int16_t lookup_exp_table(uint16_t i) {
 
 static INLINE int16_t to_linear(uint16_t h, OPLL_SLOT *slot, int16_t am) {
   uint16_t att;
-  if (slot->eg_out >= EG_MAX)
+  if (slot->eg_out > EG_MAX)
     return 0;
 
-  att = min(EG_MAX, (slot->eg_out + slot->tll + am)) << 4;
+  att = min(EG_MUTE, (slot->eg_out + slot->tll + am)) << 4;
   return lookup_exp_table(h + att);
 }
 

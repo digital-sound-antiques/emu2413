@@ -1,3 +1,6 @@
+# v1.5.8 (2022-09-19)
+- Fix the envelope threshold for DAMP to ATTACK state transition (Issue #12).
+
 # v1.5.7 (2022-09-14)
 - Silence some pedantic warnings.
 - Update minimum cmake version to 3.0.
