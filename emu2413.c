@@ -835,6 +835,8 @@ static INLINE void calc_envelope(OPLL_SLOT *slot, OPLL_SLOT *buddy, uint16_t eg_
 
   switch (slot->eg_state) {
   case DAMP:
+    // DAMP to ATTACK transition is occured when the envelope reaches EG_MAX (max attenuation but it's not mute).
+    // Do not forget to check (eg_counter & mask) == 0 to synchronize it with the progress of the envelope.
     if (slot->eg_out >= EG_MAX && (eg_counter & mask) == 0) {
       start_envelope(slot);
       if (slot->type & 1) {
@@ -856,6 +858,8 @@ static INLINE void calc_envelope(OPLL_SLOT *slot, OPLL_SLOT *buddy, uint16_t eg_
     break;
 
   case DECAY:
+    // DECAY to SUSTAIN transition must be checked at every cycle regardless of the conditions of the envelope rate and
+    // counter. i.e. the transition is not synchronized with the progress of the envelope.
     if ((slot->eg_out >> 3) == slot->patch->SL) {
       slot->eg_state = SUSTAIN;
       request_update(slot, UPDATE_EG);
