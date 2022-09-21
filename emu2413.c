@@ -835,7 +835,7 @@ static INLINE void calc_envelope(OPLL_SLOT *slot, OPLL_SLOT *buddy, uint16_t eg_
 
   switch (slot->eg_state) {
   case DAMP:
-    if (slot->eg_out >= EG_MAX) {
+    if (slot->eg_out >= EG_MAX && (eg_counter & mask) == 0) {
       start_envelope(slot);
       if (slot->type & 1) {
         if (!slot->pg_keep) {
