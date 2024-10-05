@@ -1087,7 +1087,7 @@ OPLL *OPLL_new(uint32_t clk, uint32_t rate) {
     initializeTables();
   }
 
-  opll = (OPLL *)calloc(sizeof(OPLL), 1);
+  opll = (OPLL *)calloc(1, sizeof(OPLL));
   if (opll == NULL)
     return NULL;
 
