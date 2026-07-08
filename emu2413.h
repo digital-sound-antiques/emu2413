@@ -198,6 +198,9 @@ void OPLL_copyPatch(OPLL *, int32_t, OPLL_PATCH *);
  */
 void OPLL_forceRefresh(OPLL *);
 
+int OPLL_save_state(OPLL *, uint8_t *out); /* save state to out; out=NULL -> required size */
+void OPLL_load_state(OPLL *, const uint8_t *in, int size);
+
 void OPLL_dumpToPatch(const uint8_t *dump, OPLL_PATCH *patch);
 void OPLL_patchToDump(const OPLL_PATCH *patch, uint8_t *dump);
 void OPLL_getDefaultPatch(int32_t type, int32_t num, OPLL_PATCH *);

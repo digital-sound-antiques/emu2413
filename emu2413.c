@@ -1503,3 +1503,18 @@ uint32_t OPLL_toggleMask(OPLL *opll, uint32_t mask) {
   } else
     return 0;
 }
+
+int OPLL_save_state(OPLL *opll, uint8_t *out) {
+  if (out) memcpy(out, opll, sizeof(OPLL));
+  return (int)sizeof(OPLL);
+}
+void OPLL_load_state(OPLL *opll, const uint8_t *in, int size) {
+  if (size < (int)sizeof(OPLL)) return;
+  OPLL_RateConv *conv = opll->conv; /* keep this instance's own resampler (if any) */
+  memcpy(opll, in, sizeof(OPLL));
+  opll->conv = conv;
+  if (opll->conv) OPLL_RateConv_reset(opll->conv); /* reset SRC: its ring is stale after a load */
+  /* slot->patch pointers indexed into the source struct; re-point them into THIS
+     instance's patch[] (wave_table targets a static table, so needs no relink). */
+  OPLL_forceRefresh(opll);
+}
