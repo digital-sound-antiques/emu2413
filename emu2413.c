@@ -1,5 +1,5 @@
 /**
- * emu2413 v1.5.9
+ * emu2413 v1.6.0
  * https://github.com/digital-sound-antiques/emu2413
  * Copyright (C) 2020 Mitsutaka Okazaki
  *
@@ -568,7 +568,10 @@ static void reset_slot(OPLL_SLOT *slot, int number) {
   slot->fnum = 0;
   slot->volume = 0;
   slot->pg_out = 0;
+  slot->eg_rate_h = 0;
+  slot->eg_rate_l = 0;
   slot->eg_out = EG_MUTE;
+  slot->update_requests = 0;
   slot->patch = &null_patch;
 }
 
@@ -1145,15 +1148,24 @@ void OPLL_reset(OPLL *opll) {
 
   opll->adr = 0;
 
+  memset(opll->reg, 0, sizeof(opll->reg));
+
   opll->pm_phase = 0;
   opll->am_phase = 0;
 
   opll->noise = 0x1;
+  opll->short_noise = 0;
   opll->mask = 0;
+
+  opll->test_flag = 0;
+  opll->lfo_am = 0;
 
   opll->rhythm_mode = 0;
   opll->slot_key_status = 0;
   opll->eg_counter = 0;
+
+  opll->mix_out[0] = 0;
+  opll->mix_out[1] = 0;
 
   reset_rate_conversion_params(opll);
 

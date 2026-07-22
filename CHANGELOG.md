@@ -1,3 +1,7 @@
+# v1.6.0 (2026-07-22)
+- Fixed reset function to fully clear runtime state.
+- Added save/load state functionality.
+
 # v1.5.9 (2022-09-21)
 - Fix the envelope threshold for DAMP to ATTACK state transition (Issue #12).
 
