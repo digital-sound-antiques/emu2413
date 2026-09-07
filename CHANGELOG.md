@@ -1,3 +1,6 @@
+# v1.6.1 (2026-09-07)
+- Reduced the table footprint from 138KB to 7KB.
+
 # v1.6.0 (2026-07-22)
 - Fixed reset function to fully clear runtime state.
 - Added save/load state functionality.
