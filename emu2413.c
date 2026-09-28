@@ -1,5 +1,5 @@
 /**
- * emu2413 v1.6.0
+ * emu2413 v1.6.2
  * https://github.com/digital-sound-antiques/emu2413
  * Copyright (C) 2020 Mitsutaka Okazaki
  *
@@ -529,15 +529,14 @@ static void commit_slot_update(OPLL_SLOT *slot) {
       slot->eg_shift = 0;
       slot->eg_rate_h = 0;
       slot->eg_rate_l = 0;
-      return;
-    }
-
-    slot->eg_rate_h = min(15, p_rate + (slot->rks >> 2));
-    slot->eg_rate_l = slot->rks & 3;
-    if (slot->eg_state == ATTACK) {
-      slot->eg_shift = (0 < slot->eg_rate_h && slot->eg_rate_h < 12) ? (13 - slot->eg_rate_h) : 0;
     } else {
-      slot->eg_shift = (slot->eg_rate_h < 13) ? (13 - slot->eg_rate_h) : 0;
+      slot->eg_rate_h = min(15, p_rate + (slot->rks >> 2));
+      slot->eg_rate_l = slot->rks & 3;
+      if (slot->eg_state == ATTACK) {
+        slot->eg_shift = (0 < slot->eg_rate_h && slot->eg_rate_h < 12) ? (13 - slot->eg_rate_h) : 0;
+      } else {
+        slot->eg_shift = (slot->eg_rate_h < 13) ? (13 - slot->eg_rate_h) : 0;
+      }
     }
   }
 
@@ -815,8 +814,16 @@ static INLINE void start_envelope(OPLL_SLOT *slot) {
 
 static INLINE void calc_envelope(OPLL_SLOT *slot, OPLL_SLOT *buddy, uint16_t eg_counter, uint8_t test) {
 
-  uint32_t mask = (1 << slot->eg_shift) - 1;
+  uint32_t mask;
   uint8_t s;
+
+  /* nothing to do while sustaining/releasing at a fixed level (muted or zero rate) */
+  if (!test && (slot->eg_state == SUSTAIN || slot->eg_state == RELEASE) &&
+      (slot->eg_out >= EG_MUTE || slot->eg_rate_h == 0)) {
+    return;
+  }
+
+  mask = (1 << slot->eg_shift) - 1;
 
   if (slot->eg_state == ATTACK) {
     if (0 < slot->eg_out && 0 < slot->eg_rate_h && (eg_counter & mask & ~3) == 0) {
@@ -1520,7 +1527,12 @@ void OPLL_load_state(OPLL *opll, const uint8_t *in, int size) {
   OPLL_RateConv *conv = opll->conv; /* keep this instance's own resampler (if any) */
   memcpy(opll, in, sizeof(OPLL));
   opll->conv = conv;
-  if (opll->conv) OPLL_RateConv_reset(opll->conv); /* reset SRC: its ring is stale after a load */
+  if (opll->conv) {
+    double t = -opll->out_time / opll->inp_step;
+    OPLL_RateConv_reset(opll->conv); /* reset SRC: its ring is stale after a load */
+    /* re-align the SRC phase with the restored out_time (both start at 0 on reset) */
+    opll->conv->timer = t - floor(t);
+  }
   /* slot->patch pointers indexed into the source struct; re-point them into THIS
      instance's patch[] (wave_table targets a static table, so needs no relink). */
   OPLL_forceRefresh(opll);

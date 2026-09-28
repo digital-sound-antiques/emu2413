@@ -1,3 +1,7 @@
+# v1.6.2 (2026-09-28)
+- Fixed OPLL_load_state leaving the rate converter out of phase, which distorted the output after a load.
+- Faster OPLL_calc: slot updates are no longer recomputed every sample while the envelope rate is 0, and envelopes at a fixed level are skipped.
+
 # v1.6.1 (2026-09-07)
 - Reduced the table footprint from 138KB to 7KB.
 
