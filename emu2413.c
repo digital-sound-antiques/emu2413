@@ -1488,7 +1488,9 @@ void OPLL_calcStereo(OPLL *opll, int32_t out[2]) {
   }
   opll->out_time -= opll->out_step;
   if (opll->conv) {
+    double timer = opll->conv->timer;
     out[0] = OPLL_RateConv_getData(opll->conv, 0);
+    opll->conv->timer = timer;
     out[1] = OPLL_RateConv_getData(opll->conv, 1);
   } else {
     out[0] = opll->mix_out[0];
