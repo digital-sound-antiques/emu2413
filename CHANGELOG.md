@@ -1,3 +1,6 @@
+# v1.6.3 (2026-10-08)
+- Fixed `OPLL_calcStereo()` resampling L and R at different positions when the rate converter is active. (Issue[#20](https://github.com/digital-sound-antiques/emu2413/issues/20), thanks @madscient)
+
 # v1.6.2 (2026-09-28)
 - Fixed OPLL_load_state leaving the rate converter out of phase, which distorted the output after a load.
 - Faster OPLL_calc: slot updates are no longer recomputed every sample while the envelope rate is 0, and envelopes at a fixed level are skipped.
@@ -8,6 +11,7 @@
 # v1.6.0 (2026-07-22)
 - Fixed reset function to fully clear runtime state.
 - Added save/load state functionality.
+- Fixed -Wcalloc-transposed-args. (thanks @carmiker)
 
 # v1.5.9 (2022-09-21)
 - Fix the envelope threshold for DAMP to ATTACK state transition (Issue #12).
@@ -15,7 +19,7 @@
 # v1.5.7 (2022-09-14)
 - Silence some pedantic warnings.
 - Update minimum cmake version to 3.0.
-- Fix the problem where min/max function conflict with the Visual C++ macros.
+- Fix the problem where min/max function conflict with the Visual C++ macros. (thanks @orbea)
 
 # v1.5.6 (2021-02-28)
 - Update YMF281 ROM patches.
@@ -24,8 +28,8 @@
 - Fix the problem where the output sound is broken due to the mixing of integer and floating point types in the process of rate conversion calculation (degraded at v1.5.4).
 
 # <s>v1.5.4 (2021 02-04)</s>
-- Fix the problem where the internal sample rate is calculated as int instead of double.
-- Replace older "OPLL_dump2patch" to "OPLL_dumpToPatch".
+- Fix the problem where the internal sample rate is calculated as int instead of double. (thanks @carmiker)
+- Replace older "OPLL_dump2patch" to "OPLL_dumpToPatch". (thanks @carmiker)
 
 # v1.5.3 (2021 01-31)
 - Change min/max macros to inline functions to suppress compiler errors/warnings.
