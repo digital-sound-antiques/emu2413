@@ -1,7 +1,7 @@
 /**
- * emu2413 v1.6.3
+ * emu2413 v1.6.4
  * https://github.com/digital-sound-antiques/emu2413
- * Copyright (C) 2020 Mitsutaka Okazaki
+ * Copyright (C) 2026 Mitsutaka Okazaki
  *
  * This source refers to the following documents. The author would like to thank all the authors who have
  * contributed to the writing of them.

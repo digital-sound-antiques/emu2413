@@ -1,4 +1,4 @@
-# Unreleased
+# 1.6.4 (2026-10-11)
 - Removed float/double arithmetic from the per-sample path (`OPLL_calc()`, `OPLL_calcStereo()` and the rate converter) for CPUs without an FPU. The rate converter phase is now exact, which also fixes small errors caused by accumulated rounding. (Issue[#15](https://github.com/digital-sound-antiques/emu2413/issues/15), thanks @irixxxx)
 - Faster rate converter: the sinc table is laid out per phase and the input buffer is a ring buffer. The phase is now rounded instead of truncated, which removes a constant 1/512-sample delay.
 - `OPLL_setPanFine()` values are now stored in 4.12 fixed point. The save state format has changed.
