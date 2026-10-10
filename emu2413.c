@@ -272,10 +272,10 @@ OPLL_RateConv *OPLL_RateConv_new(double f_inp, double f_out, int ch) {
     conv->buf[i] = malloc(sizeof(conv->buf[0][0]) * LW * 2);
   }
 
-  /* sinc_table[p * LW + k] is the coefficient for buf[k] at phase dn = p / SINC_RESO (0 <= p <= SINC_RESO / 2).
-     The phase 1 - dn uses the same coefficients in reverse order. */
-  conv->sinc_table = malloc(sizeof(conv->sinc_table[0]) * (SINC_RESO / 2 + 1) * LW);
-  for (i = 0; i < (SINC_RESO / 2 + 1) * LW; i++) {
+  /* sinc_table[p * LW + k] is the coefficient for buf[k] at phase dn = p / SINC_RESO (0 <= p <= SINC_RESO).
+     The coefficients for p and SINC_RESO - p are the same in reverse order, but both are kept to avoid a branch. */
+  conv->sinc_table = malloc(sizeof(conv->sinc_table[0]) * (SINC_RESO + 1) * LW);
+  for (i = 0; i < (SINC_RESO + 1) * LW; i++) {
     const double x = fabs((i % LW) - (LW / 2 - 1) - (double)(i / LW) / SINC_RESO);
     if (f_out < f_inp) {
       /* for downsampling */
@@ -292,19 +292,11 @@ OPLL_RateConv *OPLL_RateConv_new(double f_inp, double f_out, int ch) {
 /* p is the output phase in SINC_RESO units (0 <= p <= SINC_RESO). */
 static INLINE int16_t rateconv_get(OPLL_RateConv *conv, int ch, uint32_t p) {
   const int16_t *buf = conv->buf[ch] + conv->pos[ch];
-  const int16_t *coef;
+  const int16_t *coef = conv->sinc_table + p * LW;
   int32_t sum = 0;
   int k;
-  if (p <= SINC_RESO / 2) {
-    coef = conv->sinc_table + p * LW;
-    for (k = 0; k < LW; k++) {
-      sum += buf[k] * coef[k];
-    }
-  } else {
-    coef = conv->sinc_table + (SINC_RESO - p) * LW + (LW - 1);
-    for (k = 0; k < LW; k++) {
-      sum += buf[k] * coef[-k];
-    }
+  for (k = 0; k < LW; k++) {
+    sum += buf[k] * coef[k];
   }
   return sum >> SINC_AMP_BITS;
 }
